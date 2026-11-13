@@ -1,0 +1,92 @@
+{
+  "_hinweis": "Einzige Datei, die du fuer deinen Ort anpassen musst. Werte: Stadt Cham (Bayern). Brandenburger Beispiel in beispiele/niedergoersdorf.json, Cham in beispiele/cham.json. Danach: python scripts/ort_pruefen.py",
+  "name": "Cham",
+  "name_ascii": "Cham",
+  "art": "Stadt",
+  "untertitel": "Karte der Stadt",
+  "kurzbeschreibung": "Die Stadt Cham in der Oberpfalz als interaktive 3D-Karte aus offenen Daten: Gebäude, Adresssuche, Orte, Haltestellen, Veranstaltungen und Sonnenstand.",
+  "kontakt_ua": "MyCity3D (Kontakt: deine@mailadresse.de)",
+  "geo": {
+    "lat0": 49.2022,
+    "lon0": 12.6563,
+    "kachel_m": 2000,
+    "osm_relation": 960533,
+    "gemeindeschluessel": "09372116",
+    "wetter_lat": 49.218,
+    "wetter_lon": 12.666,
+    "umgrenzung_sued_west_nord_ost": [
+      49.125,
+      12.54,
+      49.28,
+      12.775
+    ]
+  },
+  "nachbarort": null,
+  "land": {
+    "_hinweis": "Luftbild, Gebaeude und Adressen kommen aus den Geodiensten des Bundeslandes (scripts/laender.py). Verdrahtet: BB (Brandenburg), BY (Bayern). Andere Laender: docs/ANDERES-BUNDESLAND.md",
+    "name": "Bayern",
+    "kennung": "BY"
+  },
+  "fahrplan": {
+    "_hinweis": "GTFS-Sollfahrplan fuer ganz Deutschland von gtfs.de (DELFI, CC BY 4.0, ca. 280 MB). Live-Abfahrten: fuer Bayern ist zurzeit keine freie transport.rest-Instanz erreichbar, deshalb aus.",
+    "gtfs_url": "https://download.gtfs.de/germany/free/latest.zip",
+    "betreiber": "DELFI e.V. über gtfs.de",
+    "lizenz": "CC BY 4.0",
+    "lizenz_url": "https://gtfs.de/de/feeds/de_full/",
+    "haltestellen_praefix": "de:09372",
+    "live_hosts": [],
+    "live_aus": true,
+    "betreiber_kurz": "gtfs.de"
+  },
+  "veroeffentlichung": {
+    "impressum_url": "",
+    "datenschutz_url": "",
+    "winscp_sitzung": "",
+    "zielordner": "",
+    "urheber": {
+      "_hinweis": "Optional: Urheberzeile in den Fusszeilen. Leer lassen = keine Zeile.",
+      "name": "",
+      "link_text": "",
+      "link_url": ""
+    }
+  },
+  "bausteine": {
+    "_hinweis": "Optionale Bausteine, jeder einzeln abschaltbar (false oder null). Nur fuer Brandenburg (Bayern: siehe docs/BAYERN.md): baustellen, gelaende, waldbrand (Seite des Landesministeriums), meldeportal im Beispiel (Maerker). Fuer ganz Deutschland: landwirtschaft (DWD, naechste Station), notfall (Loeschwasser, Sirenen, Anlagen, Freizeit, Strassenlampen aus OSM), klima (DWD-Stationen, Liste von Hand), ortsgeschichte (Wikipedia), touren (OSM; wikivoyage = Artikeltitel oder null), webcam (DWD-Bilderserver), drohnenhinweis (Verweis auf dipul). muellabfuhr: Einbettung der Abfuhrabfrage des oertlichen Entsorgers (Adresse des Formulars, das er selbst einbettbar anbietet); null = keine. Das Beispiel gilt fuer Suedbrandenburg (SBAZV). Fremde Formulare setzen oft ein Cookie: in der Datenschutzerklaerung nennen. solar_kwh_je_kwp: Jahresertrag je kWp bei bester Ausrichtung fuer die Solar-Schaetzung (Mitteldeutschland etwa 980). Jeder eingeschaltete Dienst im Browser steht auch im Hinweisfenster der Live-Daten und in der Inhaltsrichtlinie (scripts/baue_seiten.py). Quellen und Lizenzen: docs/DATENQUELLEN.md.",
+    "baustellen": true,
+    "gelaende": false,
+    "muellabfuhr": null,
+    "solar_kwh_je_kwp": 1020,
+    "landwirtschaft": true,
+    "waldbrand": null,
+    "notfall": true,
+    "ortsgeschichte": true,
+    "touren": {
+      "wikivoyage": null
+    },
+    "klima": {
+      "stationen": [
+        [
+          "04559",
+          "Schorndorf-Knöbling",
+          5.1,
+          "5 km entfernt"
+        ],
+        [
+          "07370",
+          "Waldmünchen",
+          21.1,
+          "21 km entfernt"
+        ],
+        [
+          "04911",
+          "Straubing",
+          42.3,
+          "42 km entfernt"
+        ]
+      ]
+    },
+    "webcam": null,
+    "meldeportal": null,
+    "drohnenhinweis": true
+  }
+}

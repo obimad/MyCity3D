@@ -16,7 +16,7 @@ import sys
 from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from geo import LAT0, LON0, ORT, ROOT  # noqa: E402
+from geo import LAND, LAT0, LON0, ORT, ROOT  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -95,8 +95,10 @@ def csp():
     fp = ORT["fahrplan"]
     b = bausteine()
     connect = ["'self'", "https://api.brightsky.dev", "https://air-quality-api.open-meteo.com"]
-    if b["baustellen"]:
+    if b["baustellen"] and LAND.get("baustellen") == "bb":  # Bayern: Baustellen aus eigener Datei, kein Fremdabruf
         connect.append("https://isk.geobasis-bb.de")
+    if not LAND.get("brw") and LAND.get("brw_live"):  # Bodenrichtwert auf Klick (Bayern)
+        connect.append("https://" + LAND["brw_live"]["host"])
     if not fp.get("live_aus"):
         connect += fp.get("live_hosts", [])
     img = "'self' data: blob:"
@@ -144,6 +146,7 @@ def werte():
         "BETREIBER": fp["betreiber"],
         "BETREIBER_KURZ": fp.get("betreiber_kurz", fp["betreiber"]),
         "FAHRPLAN_LIZENZ": fp["lizenz"],
+        "GEOBASIS": LAND["quelle"]["fuss"],
         "MELDEPORTAL_NAME": (b["meldeportal"] or {}).get("name", ""),
         "URHEBER_ZEILE_HTML": zeile,
         "URHEBER_ATTR_HTML": attr,
@@ -186,7 +189,9 @@ def ort_js():
         "lizenz": fp["lizenz"], "lizenzUrl": fp.get("lizenz_url", ""),
         "liveHosts": [] if fp.get("live_aus") else fp.get("live_hosts", []),
         "impressum": v.get("impressum_url", ""), "datenschutz": v.get("datenschutz_url", ""),
-        "baustellen": b["baustellen"], "gelaende": b["gelaende"], "muell": b["muell"],
+        "geobasis": LAND["quelle"], "adressenOsm": LAND["addr"] == "lod2_osm",
+        "brwLive": None if LAND.get("brw") else LAND.get("brw_live"),
+        "baustellen": LAND.get("baustellen") if b["baustellen"] else None, "gelaende": b["gelaende"], "muell": b["muell"],
         "solarKwh": (ORT.get("bausteine") or {}).get("solar_kwh_je_kwp"), "betreiberKuerzel": fp.get("betreiber_kuerzel", {}),
         "landwirt": f["bodenfeuchte"], "waldbrand": b["waldbrand"], "meldeportal": b["meldeportal"], "drohne": b["drohne"],
         "notfall": b["notfall"], "klima": b["klima"], "geschichte": b["geschichte"], "touren": b["touren"], "webcam": b["webcam"],
@@ -224,6 +229,10 @@ def main():
     os.makedirs(os.path.join(site, "data"), exist_ok=True)
     open(os.path.join(site, "data", "ort.js"), "w", encoding="utf-8", newline="\n").write(ort_js())
     print("geschrieben: data/ort.js")
+    brw = os.path.join(site, "data", "brw.js")  # ohne Bodenrichtwerte (laender.py: brw False) leerer Platzhalter
+    if not LAND.get("brw") and not os.path.exists(brw):
+        open(brw, "w", encoding="utf-8", newline="\n").write("window.AL_BRW=null;\n")
+        print("geschrieben: data/brw.js (keine Bodenrichtwerte)")
     ev = os.path.join(site, "data", "events_auto.js")  # Platzhalter, solange kein Termin-Abruf eingerichtet ist
     if not os.path.exists(ev):
         open(ev, "w", encoding="utf-8", newline="\n").write('window.AL_EVENTS_AUTO={"stand":null,"quellen":[],"items":[]};\n')
