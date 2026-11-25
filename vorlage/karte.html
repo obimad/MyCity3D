@@ -15,7 +15,9 @@
 <link rel="stylesheet" href="wetter.css?v=2eb36b48">
 <link rel="stylesheet" href="lage.css?v=5b8cae6a">
 <link rel="stylesheet" href="style.css?v=7dbb4834">
-</head>
+<!--IF touren--><link rel="stylesheet" href="karte-touren.css">
+<!--ENDIF--><!--IF parken--><link rel="stylesheet" href="karte-parken.css">
+<!--ENDIF--></head>
 <body>
 <canvas id="c"></canvas>
 
@@ -53,6 +55,7 @@
   <button id="bTop" title="Draufsicht / Schrägansicht" aria-label="Draufsicht umschalten" class="mono">2D</button>
   <button id="bRotR" title="Nach rechts drehen" aria-label="Nach rechts drehen"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg></button>
   <button id="bHome" title="Zur Ortsmitte" aria-label="Zur Ortsmitte"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg></button>
+  <button id="bMk" type="button" aria-pressed="false" title="Alle Symbole und Marker ausblenden (Taste H)" aria-label="Alle Symbole und Marker ausblenden (Taste H)"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle><path class="strike" d="M3 3l18 18"></path></svg></button>
   <button id="bShare" title="Link zu dieser Ansicht kopieren" aria-label="Link zu dieser Ansicht kopieren"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="M8.6 13.5l6.8 4"></path><path d="M15.4 6.5l-6.8 4"></path></svg></button>
 </div>
 
@@ -83,7 +86,20 @@
     <label id="wolkenRow" hidden><input type="checkbox" data-layer="wolken" checked><span>Wolken (Wetter)</span></label>
     <!--IF gelaende--><label><input type="checkbox" data-layer="relief"><span>Geländerelief (überhöht)</span></label>
     <!--ENDIF-->    <label><input type="checkbox" data-layer="shadows" checked><span>Schatten</span></label>
-    <!--IF ebenen--><h3 class="layhead">Landwirtschaft und Sicherheit</h3>
+    <!--IF nachtlicht--><label><input type="checkbox" data-layer="nachtlicht" checked><span>Straßenlampen bei Dunkelheit<small class="lstate" id="st-nachtlicht"></small><small class="lnote">Lampen aus OpenStreetMap, dazu symbolisch ergänzte Standorte entlang der Ortsstraßen; leuchten, wenn die Sonne (Sonnenstand) mehr als 6° unter dem Horizont steht</small></span></label>
+    <!--ENDIF--><!--IF verkehr--><label><input type="checkbox" data-layer="verkehr" checked><span>Autoverkehr (Simulation)<small class="lstate" id="st-verkehr"></small><small class="lnote">Autos, Lkw und Motorräder auf den Straßen aus OpenStreetMap; Menge und Tempo sind angenommen, keine Verkehrsmessung</small></span></label>
+    <!--ENDIF--><!--IF modelle--><label><input type="checkbox" data-layer="modelle" checked><span>3D-Modelle (eigene Gebäudemodelle)<small class="lstate" id="st-modelle"></small></span></label>
+    <!--ENDIF--><!--IF planen--><h3 class="layhead">Planen und Grundstücke</h3>
+    <!--ENDIF--><!--IF bplan--><label><input type="checkbox" data-layer="bplan"><span>Bebauungspläne und Satzungen<small class="lstate" id="st-bplan"></small></span></label>
+    <!--ENDIF--><!--IF flurst--><label><input type="checkbox" data-layer="flurst"><span>Flurstücke (Liegenschaftskataster)<small class="lstate" id="st-flurst"></small></span></label>
+    <!--ENDIF--><!--IF mobilitaet--><h3 class="layhead">Mobilität, Internet, Fotos</h3>
+    <!--ENDIF--><!--IF parken--><label><input type="checkbox" data-layer="parken"><span>Parkplätze (kostenpflichtig oder frei, Parkregeln am Straßenrand)<small class="lstate" id="st-parken"></small></span></label>
+    <div id="pkBox" hidden></div>
+    <!--ENDIF--><!--IF mobil--><label><input type="checkbox" data-layer="mobil"><span>P+R, Taxi, Carsharing, Mitfahrbänke, Fahrkarten<small class="lstate" id="st-mobil"></small></span></label>
+    <!--ENDIF--><!--IF glasfaser--><label><input type="checkbox" data-layer="glasfaser"><span>Glasfaser (FTTB/H) je 100-m-Zelle<small class="lstate" id="st-glasfaser"></small></span></label>
+    <div class="lglegend" id="lg-glasfaser" hidden><i style="background:#ff785a"></i>0-10 % <i style="background:#ffaa46"></i>10-50 % <i style="background:#bee178"></i>50-75 % <i style="background:#5ad2a0"></i>75-95 % <i style="background:#28c8ff"></i>über 95 % der Haushalte und Firmen in der Zelle</div>
+    <!--ENDIF--><!--IF fotos--><label><input type="checkbox" data-layer="fotos"><span>Straßenfotos (Panoramax, Commons, KartaView)<small class="lstate" id="st-fotos"></small></span></label>
+    <!--ENDIF-->    <!--IF ebenen--><h3 class="layhead">Landwirtschaft und Sicherheit</h3>
     <!--ENDIF-->    <!--IF gelaende--><label><input type="checkbox" data-layer="hang"><span>Hangneigung (Geländeanalyse)</span></label>
     <!--ENDIF-->    <!--IF gelaende--><label><input type="checkbox" data-layer="senken"><span>Geländesenken (Geländeanalyse)</span></label>
     <!--ENDIF-->    <!--IF notfall--><label><input type="checkbox" data-layer="notfall"><span>Löschwasser (Hydranten, Brunnen, Teiche)</span></label>
@@ -117,7 +133,9 @@
   <button class="x" aria-label="Schließen" data-close="panel">×</button>
   <h2>Orte</h2>
   <select id="plArea" aria-label="Gebiet" hidden><option value="gem">{{ART}} {{NAME}}</option><option value="nb">{{NB_NAME}} (Nachbarort)</option><option value="all">{{ART}} und {{NB_NAME}}</option></select>
-  <div class="chips" id="plFilter"></div>
+  <div class="plactive" id="plActive" role="status" hidden><span id="plActiveTxt"></span><button type="button" class="chip" id="plClear" aria-label="Orte-Filter aufheben">Filter aufheben</button></div>
+  <div class="chips" id="plFilter" role="group" aria-label="Kategorien"></div>
+  <div class="chips pltypes" id="plTypes" role="group" aria-label="Arten" hidden></div>
   <div class="scroll" id="plList"></div>
   <p class="note">Quelle: OpenStreetMap. Fehlende Öffnungszeiten sind nicht verifiziert.</p>
 </section>
@@ -155,6 +173,15 @@
   <div id="sunSpot"><p class="note">Ein Gebäude oder eine Stelle auf der Karte anklicken, um die Besonnung dort zu sehen.</p></div>
 </section>
 
+<!--IF touren--><section class="panel glass" id="panel-touren" hidden>
+  <button class="x" aria-label="Schließen" data-close="panel">×</button>
+  <h2>Touren</h2>
+  <p class="note" id="trIntro"></p>
+  <div class="chips" id="trFilter" role="group" aria-label="Art der Route"></div>
+  <div class="scroll" id="trList"></div>
+  <p class="note">Verlauf: © OpenStreetMap-Mitwirkende, ODbL. Waymarked Trails zeigt dieselben OpenStreetMap-Daten und ist hier nur verlinkt. Zustand und Sperrungen vor Ort können abweichen.</p>
+</section>
+<!--ENDIF-->
 <dialog id="sources" class="glass">
   <button class="x" aria-label="Schließen" data-close="dialog">×</button>
   <h2>Quellen und Hinweise</h2>
@@ -168,10 +195,11 @@
   <button class="pill" data-panel="news"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path></svg><span>Neu</span><b id="nNews">0</b></button>
   <button class="pill" data-panel="traffic"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v6M15 6v6M2 12h19.6"/><path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/><circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></svg><span>Aktuell</span></button>
   <button class="pill" data-panel="sun"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg><span>Sonne</span></button>
-  <button class="pill" data-panel="sources"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg><span>Quellen</span></button>
+  <!--IF touren--><button class="pill" data-panel="touren"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg><span>Touren</span></button>
+  <!--ENDIF-->  <button class="pill" data-panel="sources"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg><span>Quellen</span></button>
 </nav>
 
-<footer class="attr">© GeoBasis-DE/LGB, dl-de/by-2-0 (Daten geändert) · © OpenStreetMap-Mitwirkende · Fahrplan: {{BETREIBER_KURZ}}, {{FAHRPLAN_LIZENZ}}{{URHEBER_ATTR_HTML}} · <span id="stand">Stand: …</span><span id="legal"></span></footer>
+<footer class="attr">© GeoBasis-DE/LGB, dl-de/by-2-0 (Daten geändert) · © OpenStreetMap-Mitwirkende · Fahrplan: {{BETREIBER_KURZ}}, {{FAHRPLAN_LIZENZ}}<!--IF glasfaser--> · © BNetzA<!--ENDIF--><!--IF bplan--> · PLIS Brandenburg<!--ENDIF--><!--IF fotos--> · Fotos: Panoramax, Commons, KartaView (CC BY-SA)<!--ENDIF-->{{URHEBER_ATTR_HTML}} · <span id="stand">Stand: …</span><span id="legal"></span></footer>
 <div id="loading">{{NAME}} wird geladen …</div>
 
 <script src="js/three.min.js?v=f76d110b"></script>
@@ -198,7 +226,10 @@
 <!--ENDIF--><!--IF geschichte--><script src="data/ortsgeschichte.js?v=4d416c51"></script>
 <!--ENDIF--><!--IF touren--><script src="data/touren.js?v=3b326718"></script>
 <!--ENDIF--><script src="landwirt.js?v=5d39a1bd"></script>
-<script src="js/app.js?v=2f5409be"></script>
-<script src="live-alle.js?v=bee69b07"></script>
+<!--IF modelle--><script src="data/modelle.js"></script>
+<!--ENDIF--><script src="js/app.js?v=2f5409be"></script>
+<!--IF ebenen_js--><script src="js/ebenen.js"></script>
+<!--ENDIF--><!--IF parken--><script src="js/parken.js"></script>
+<!--ENDIF--><script src="live-alle.js?v=bee69b07"></script>
 </body>
 </html>

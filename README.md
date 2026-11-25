@@ -19,7 +19,10 @@ Vorschau am Beispielort Niedergörsdorf: https://niedergoersdorf-in-3d.digital-a
 | Wetter | Wetter und amtliche Warnungen, Wetterbericht für 7 Tage, Niederschlag der letzten Tage, **Wolkenebene** als Shader nach Bedeckungsgrad und Windrichtung des DWD, optional eine Webcam des DWD (`bausteine.webcam`) |
 | Land und Sicherheit | Bodenfeuchte und Agrarwetter der nächsten DWD-Station, Waldbrandstufe mit Frischeprüfung (nur Brandenburg), Ebenen für Löschwasser, Sirenen, Windräder, Biogas und Solarparks, Flugplätze mit Drohnenhinweis, Freizeit- und Alltagsorte, Straßenlampen (aus OpenStreetMap), Verweise auf ein Meldeportal und auf die amtliche Drohnenkarte |
 | Klima | Klimastreifen, Jahreswerte und Monatsmittel von DWD-Stationen (`bausteine.klima`) |
-| Geschichte und Touren | Ortsgeschichte aus Wikipedia (CC BY-SA mit Urhebernennung), Rad-, Wander- und Skate-Routen aus OpenStreetMap als eigene Seite und als 3D-Ebene |
+| Geschichte und Touren | Ortsgeschichte aus Wikipedia (CC BY-SA mit Urhebernennung), Rad-, Wander- und Skate-Routen aus OpenStreetMap als eigene Seite und als 3D-Ebene; im Kartenbereich **Touren** Liste nach Art, Auswahl hebt eine Route hervor (breiter, pulsierend, die anderen blass), Filter, „Nur diese Route“, Sprung per Link `karte.html#route=<OSM-Relation>` |
+| Zusatzebenen | Parkplätze und Parkregeln am Straßenrand, P+R/Taxi/Carsharing/Fahrkarten (OSM), Glasfaser je 100-m-Zelle (Bundesnetzagentur), Straßenfotos (Panoramax, Wikimedia Commons, KartaView; das Bild lädt erst nach Klick), Bebauungspläne und Flurstücke (nur Brandenburg), Straßenlampen bei Dunkelheit, simulierter Autoverkehr; jede Ebene ein eigener Baustein in `ort.json` |
+| Eigene 3D-Modelle | Einzelne Gebäude (Kirche, Mühle, Wahrzeichen) lassen sich durch eigene Modelle ersetzen, Mühlenflügel drehen sich; die Vorlage liefert keine Modelle mit, Anleitung `docs/MODELLE.md` |
+| Bedienung | **Orte-Filter**: Kategorien anhaken, dann folgen Arten und Orte, in der Ortskarte „Alle ... zeigen“; Taste **H** blendet alle Symbole aus; Low-Poly-Bäume; Busse in Originalgröße |
 | Aktuelle Lage | Luftqualität, Baustellen (nur Brandenburg), optional eingebettete Müllabfuhr-Abfrage |
 | Teilen | Link zur Ansicht (`#k=…&l=…`: Kamera, Ebenen, Einfärbung, gewählter Ort) |
 | Datenschutz | Inhaltsrichtlinie (CSP) ohne Inline-Skripte, aus `ort.json` erzeugt; keine Verbindung zu Dritten ohne Klick |
@@ -37,7 +40,10 @@ Vorschau am Beispielort Niedergörsdorf: https://niedergoersdorf-in-3d.digital-a
 | Müllabfuhr | Abfuhrabfrage des örtlichen Entsorgers (eingebettet) | frei einstellbar, Beispiel Südbrandenburg |
 | Waldbrandstufe | Landesministerium Brandenburg (Seite wird täglich gelesen) | **Brandenburg**, abschaltbar |
 | Bodenfeuchte, Klima, Webcam | Deutscher Wetterdienst (Climate Data Center, Open Data), CC BY 4.0 | Deutschland |
-| Löschwasser, Sirenen, Anlagen, Touren | OpenStreetMap, ODbL | überall |
+| Löschwasser, Sirenen, Anlagen, Touren, Parken, Mobilität, Straßenlampen, Straßennetz | OpenStreetMap, ODbL | überall |
+| Glasfaser | Breitbandatlas der Bundesnetzagentur (Gigabit-Grundbuch) | Deutschland |
+| Straßenfotos | Panoramax (CC BY-SA), Wikimedia Commons (freie Lizenz je Bild), KartaView (CC BY-SA) | überall, Bild erst nach Klick |
+| Bebauungspläne, Flurstücke | PLIS Brandenburg, ALKIS der LGB, dl-de/by-2-0 | **Brandenburg** |
 | Ortsgeschichte | Wikipedia, CC BY-SA 4.0 | überall, wo es Artikel gibt |
 | Fahrplan (Sollfahrplan) | VBB-GTFS, CC BY 4.0 (austauschbar, `ort.json`) | VBB-Gebiet, sonst anderen Feed eintragen |
 | Live-Abfahrten | freie `transport.rest`-Instanzen (austauschbar) | Netz der gewählten Instanz |

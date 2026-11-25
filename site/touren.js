@@ -32,7 +32,8 @@
       return '<h3 class="tr-h"><i style="background:' + COL[a] + '"></i>' + ART_TXT[a] + '</h3><ul class="tr-list">' + routen.filter(function (r) { return r.art === a; }).map(function (r) {
         var sub = [(NETZ[r.netz] || r.netz) ? 'Netz: ' + (NETZ[r.netz] || r.netz) : '', r.km_gesamt ? 'gesamt ' + Math.round(r.km_gesamt) + ' km' : '', r.von && r.nach ? esc(r.von) + ' - ' + esc(r.nach) : '', r.betreiber ? esc(r.betreiber) : ''].filter(Boolean).join(' · ');
         return '<li><button type="button" class="tr-b' + (sel === r.id ? ' on' : '') + '" data-id="' + esc(r.id) + '"><b>' + esc(r.name) + '</b>' + (r.ref && r.ref !== r.name ? ' <small>' + esc(r.ref) + '</small>' : '') + '<span class="tr-km">' + de1(r.km_gem) + ' km im Gebiet</span>' + (sub ? '<small class="tr-sub">' + sub + '</small>' : '') + '</button>'
-          + (r.web && /^https?:\/\//.test(r.web) ? '<a class="tr-w" href="' + esc(r.web) + '" target="_blank" rel="noopener">Webseite der Route →</a>' : '') + '</li>';
+          + (r.web && /^https?:\/\//.test(r.web) ? '<a class="tr-w" href="' + esc(r.web) + '" target="_blank" rel="noopener">Webseite der Route →</a>' : '')
+          + (/^relation\/\d+$/.test(r.id) ? '<a class="tr-w" href="karte.html#route=' + r.id.slice(9) + '">In der 3D-Karte zeigen →</a>' : '') + '</li>';
       }).join('') + '</ul>';
     }).join('');
   }

@@ -23,13 +23,15 @@
   // ------------------------------------------------------------------ Zustand
   const S = {
     dirty: true, moved: true, colorMode: 'nutzung', sel: null, pending: null, panel: null,
-    L: { photo: true, buildings: true, trees: true, places: true, stops: true, fahrzeuge: true, events: true, labels: true, borders: true, roads: false, shadows: true, brw: false, wolken: true, relief: false, hang: false, senken: false, notfall: false, sirenen: false, energie: false, flug: false, freizeit: false, alltag: false, lampen: false, touren: false },
-    sun: { y: 2026, mo: 6, d: 21, min: 14 * 60 }, playing: false, spot: null, evFilter: '30', evCats: new Set(), evArea: 'all', plSel: new Set(), plArea: 'gem', dim: 1,
+    L: { photo: true, buildings: true, trees: true, places: true, stops: true, fahrzeuge: true, events: true, labels: true, borders: true, roads: false, shadows: true, brw: false, wolken: true, relief: false, hang: false, senken: false, notfall: false, sirenen: false, energie: false, flug: false, freizeit: false, alltag: false, lampen: false, touren: false, parken: false, bplan: false, flurst: false, mobil: false, glasfaser: false, fotos: false, modelle: true, nachtlicht: true, verkehr: true },
+    hideMk: false, // alle Symbole und Marker ausgeblendet (Taste H), unabhängig von den einzelnen Ebenen
+    sun: { y: 2026, mo: 6, d: 21, min: 14 * 60 }, playing: false, spot: null, evFilter: '30', evCats: new Set(), evArea: 'all', plSel: new Set(), plTyp: new Set(), plArea: 'gem', dim: 1,
   };
 
+  const EXT = { layer: [], frame: [], pick: [] }; // Erweiterungen aus js/ebenen.js: bei Ebenenwechsel, je Bild, beim Klick auf eine Stelle
   const CL = { mesh: null, ok: false }; // Wolkenebene (nur mit eingeblendeten Wetterdaten)
   const TR = { mesh: null, mat: null, built: false }; // Touren-Bänder (data/touren.js)
-  const OVL = [{ k: 'relief', o: 2 }, { k: 'hang', o: 3 }, { k: 'senken', o: 4 }]; // Bildebenen aus dem Geländemodell (img/<name>.png)
+  const OVL = [{ k: 'relief', o: 2 }, { k: 'hang', o: 3 }, { k: 'senken', o: 4 }, { k: 'glasfaser', o: 5 }]; // Glasfaser halbtransparent (siehe applyLayers) // Bildebenen aus dem Geländemodell (img/<name>.png)
   const nfH = (v) => v.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
   // ------------------------------------------------------------------ Renderer / Szene
@@ -235,8 +237,21 @@
     mesh.visible = S.L.buildings;
     scene.add(mesh);
     t.bld = { mesh, pos, idx, kind, vb, rb, ts, te, boxes, box, ca };
-    recolorTile(t);
+    recolorTile(t); applyHide(t);
   }
+  const HIDE = new Set(); // Gebäude-IDs, die gerade ein eigenes 3D-Modell ersetzt (js/ebenen.js)
+  function applyHide(t) { // Dreiecke versteckter Gebäude auf einen Punkt legen; die Originalindizes bleiben in idx0
+    const bl = t.bld; if (!bl || bl.empty) return;
+    const B = t.data.b; let ch = false;
+    if (!bl.idx0 && !HIDE.size) return;
+    if (!bl.idx0) bl.idx0 = bl.idx.slice();
+    B.forEach((b, bi) => {
+      const h = HIDE.has(b.id), a = bl.ts[bi] * 3, e = bl.te[bi] * 3;
+      for (let i = a; i < e; i++) { const v = h ? bl.idx0[a] : bl.idx0[i]; if (bl.idx[i] !== v) { bl.idx[i] = v; ch = true; } }
+    });
+    if (ch) { bl.mesh.geometry.index.needsUpdate = true; S.dirty = true; }
+  }
+  function setHidden(ids, on) { ids.forEach((id) => (on ? HIDE.add(id) : HIDE.delete(id))); for (const k in T) applyHide(T[k]); }
   function recolorTile(t) {
     const bl = t.bld;
     if (!bl || bl.empty) return;
@@ -312,21 +327,54 @@
       + (q.use >= 5 ? 'rund ' + nf(q.use, 5) + ' m² nutzbar, ca. ' + nf(q.kwp, 0.5) + ' kWp, ca. ' + nf(q.kwh, 100) + ' kWh im Jahr<span class="s">Schätzung ohne Gewähr, ohne Verschattung und Statik</span>' : 'kaum geeignete Dachfläche (Nordseiten)') + '</dd>';
   }
 
-  const treeGeo = new THREE.ConeGeometry(2.6, 9, 5).translate(0, 5.5, 0);
-  const treeMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const TREE_COL = ['#4f7a45', '#3f6a3c', '#5b8650', '#35603a'].map(col);
+  // Baeume: zwei einfache Low-Poly-Formen statt eines Kegels (Laubbaum: Stamm und zwei Kronenkloetze, Nadelbaum: drei gestapelte Kegel).
+  // Die Baumart steht nicht in den Daten (nur der Standort), sie wird je Baum nach dem Zufall der Kachel gewaehlt; Groesse und Farbton variieren leicht.
+  function mergeParts(parts) {
+    let n = 0;
+    const gs = parts.map((p) => { const g = p.g.index ? p.g.toNonIndexed() : p.g; if (p.sx) g.scale(p.sx, p.sy, p.sz); g.translate(p.x || 0, p.y || 0, p.z || 0); n += g.attributes.position.count; return { g, c: col(p.c) }; });
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), colr = new Float32Array(n * 3);
+    let o = 0;
+    gs.forEach(({ g, c }) => { const cnt = g.attributes.position.count; pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); for (let k = 0; k < cnt; k++) { colr[(o + k) * 3] = c.r; colr[(o + k) * 3 + 1] = c.g; colr[(o + k) * 3 + 2] = c.b; } o += cnt; g.dispose(); });
+    const r = new THREE.BufferGeometry();
+    r.setAttribute('position', new THREE.BufferAttribute(pos, 3)); r.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); r.setAttribute('color', new THREE.BufferAttribute(colr, 3));
+    r.computeBoundingSphere();
+    return r;
+  }
+  const treeGeoLaub = mergeParts([
+    { g: new THREE.CylinderGeometry(0.3, 0.5, 3.4, 6), y: 1.7, c: '#6b4a2f' },
+    { g: new THREE.IcosahedronGeometry(3.0, 0), sx: 1, sy: 0.88, sz: 1, y: 5.3, c: '#3f6c3a' },
+    { g: new THREE.IcosahedronGeometry(2.1, 0), x: 1.1, y: 7.4, z: 0.5, c: '#55844a' },
+    { g: new THREE.IcosahedronGeometry(1.7, 0), x: -1.4, y: 4.6, z: -0.9, c: '#325a33' },
+  ]);
+  const treeGeoNadel = mergeParts([
+    { g: new THREE.CylinderGeometry(0.22, 0.38, 2.2, 5), y: 1.1, c: '#5d4129' },
+    { g: new THREE.ConeGeometry(2.7, 4.4, 6), y: 4.0, c: '#21472b' },
+    { g: new THREE.ConeGeometry(2.1, 3.9, 6), y: 6.2, c: '#2a5535' },
+    { g: new THREE.ConeGeometry(1.4, 3.4, 6), y: 8.2, c: '#326340' },
+  ]);
+  const treeMat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true });
+  const TREE_TINT = ['#ffffff', '#f3f8ea', '#e8f1dc', '#fbf3e2', '#eef5ee'].map(col);
   function buildTrees(t) {
     const tr = t.data.tr, n = tr.length / 2;
     if (!n) { t.trees = { empty: true }; return; }
-    const mesh = new THREE.InstancedMesh(treeGeo, treeMat, n);
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
-    for (let i = 0; i < n; i++) {
-      const h = hash(t.key + i), s = 0.7 + (h % 100) / 140;
-      sc.set(s, s * (0.9 + ((h >>> 8) % 40) / 100), s); ps.set(tr[i * 2], 0, tr[i * 2 + 1]);
-      m4.compose(ps, q, sc); mesh.setMatrixAt(i, m4); mesh.setColorAt(i, TREE_COL[(h >>> 4) % 4]);
-    }
-    mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false; mesh.visible = S.L.trees;
-    scene.add(mesh); t.trees = { mesh };
+    const laub = [], nadel = [];
+    for (let i = 0; i < n; i++) { const h = hash(t.key + i); (((h >>> 12) % 10) < 6 ? laub : nadel).push(i); }
+    const grp = new THREE.Group();
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), ey = new THREE.Euler();
+    [[laub, treeGeoLaub], [nadel, treeGeoNadel]].forEach(([ids, geo]) => {
+      if (!ids.length) return;
+      const mesh = new THREE.InstancedMesh(geo, treeMat, ids.length);
+      ids.forEach((i, k) => {
+        const h = hash(t.key + i), s = 0.7 + (h % 100) / 140;
+        sc.set(s, s * (0.9 + ((h >>> 8) % 40) / 100), s); ps.set(tr[i * 2], 0, tr[i * 2 + 1]);
+        q.setFromEuler(ey.set(0, ((h >>> 16) % 628) / 100, 0));
+        m4.compose(ps, q, sc); mesh.setMatrixAt(k, m4); mesh.setColorAt(k, TREE_TINT[(h >>> 4) % TREE_TINT.length]);
+      });
+      mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
+      grp.add(mesh);
+    });
+    grp.visible = S.L.trees;
+    scene.add(grp); t.trees = { mesh: grp };
   }
 
   const ROAD_W = { motorway: 14, trunk: 12, primary: 10, secondary: 9, tertiary: 8, unclassified: 6, residential: 6, living_street: 5, service: 4,
@@ -355,7 +403,7 @@
     scene.add(mesh); t.roads = { mesh };
   }
 
-  function disposeMesh(o) { if (o && o.mesh) { scene.remove(o.mesh); o.mesh.geometry.dispose(); if (o.mesh.dispose) o.mesh.dispose(); } }
+  function disposeMesh(o) { if (o && o.mesh) { scene.remove(o.mesh); if (o.mesh.geometry && !o.mesh.isGroup) o.mesh.geometry.dispose(); if (o.mesh.children && o.mesh.isGroup) o.mesh.children.forEach((c) => { if (c.dispose) c.dispose(); }); if (o.mesh.dispose) o.mesh.dispose(); } }
   let buildBudget = 0;
   function streamTiles() {
     const d = view.dist;
@@ -424,6 +472,35 @@
     advertising_agency: 'Werbeagentur', driving_school: 'Fahrschule', social_facility: 'Soziale Einrichtung', physiotherapist: 'Physiotherapie', alternative: 'Heilpraktiker', speech_therapist: 'Logopädie',
     occupational_therapist: 'Ergotherapie', laboratory: 'Labor', attraction: 'Sehenswürdigkeit', hardware: 'Eisenwaren', shoes: 'Schuhe', optician: 'Optiker', mobile_phone: 'Handyladen', jewelry: 'Juwelier',
     books: 'Buchhandlung', electronics: 'Elektronik', kiosk: 'Kiosk', pet: 'Tierbedarf', toys: 'Spielwaren', garden_centre: 'Gartenmarkt', variety_store: 'Gemischtwaren', department_store: 'Kaufhaus', chemist: 'Drogerie' });
+  // Arten im Orte-Filter: Mehrzahl für "Alle ... zeigen". Dazu die Einzahl für Arten, die TYPE_DE noch nicht kannte (vorher stand dort der OSM-Schlüssel).
+  const ART_PL = { advertising_agency: 'Werbeagenturen', agrarian: 'Landhändler', 'agrarian;farm': 'Landwirtschaftsbetriebe', alternative: 'Heilpraktiker', antiques: 'Antiquitätenläden', apartment: 'Ferienwohnungen',
+    art: 'Kunsthandlungen', arts_centre: 'Kulturzentren', artwork: 'Kunstwerke', association: 'Vereine', attraction: 'Sehenswürdigkeiten', bakery: 'Bäckereien', bank: 'Banken', bar: 'Bars', beauty: 'Kosmetikstudios',
+    beverages: 'Getränkemärkte', bicycle: 'Fahrradläden', biergarten: 'Biergärten', books: 'Buchhandlungen', butcher: 'Fleischereien', cafe: 'Cafés', camp_site: 'Campingplätze', car: 'Autohäuser', car_parts: 'Autoteilehändler',
+    car_repair: 'Autowerkstätten', car_wash: 'Autowaschanlagen', caravan_site: 'Wohnmobilstellplätze', charging_station: 'Ladestationen', chemist: 'Drogerien', clinic: 'Kliniken', clothes: 'Bekleidungsgeschäfte',
+    community_centre: 'Dorfgemeinschaftshäuser', company: 'Firmen', convenience: 'Lebensmittelläden', cosmetics: 'Kosmetikgeschäfte', coworking: 'Coworking-Räume', curtain: 'Gardinengeschäfte', dentist: 'Zahnärzte',
+    department_store: 'Kaufhäuser', doctors: 'Arztpraxen', doityourself: 'Baumärkte', driver_training: 'Fahrtrainings', driving_school: 'Fahrschulen', dry_cleaning: 'Reinigungen', electronics: 'Elektronikgeschäfte',
+    estate_agent: 'Immobilienmakler', events_venue: 'Veranstaltungsorte', fabric: 'Stoffgeschäfte', farm: 'Hofläden', fast_food: 'Imbisse', ferry_terminal: 'Fähranleger', financial_advisor: 'Finanzberater',
+    fire_station: 'Feuerwehren', florist: 'Blumenläden', food_court: 'Food Courts', foundation: 'Stiftungen', fountain: 'Brunnen', frame: 'Rahmengeschäfte', fuel: 'Tankstellen', funeral_directors: 'Bestattungsunternehmen',
+    furniture: 'Möbelgeschäfte', gallery: 'Galerien', garden_centre: 'Gartenmärkte', gift: 'Geschenkläden', government: 'Behörden', grave_yard: 'Friedhöfe', guest_house: 'Pensionen', hairdresser: 'Friseure',
+    hardware: 'Eisenwarenhändler', healer: 'Heilpraktiker', hearing_aids: 'Hörgeräteakustiker', hostel: 'Herbergen', hotel: 'Hotels', houseware: 'Haushaltswarenläden', 'hydraulics;pneumatics': 'Technikhändler',
+    information: 'Infotafeln', insurance: 'Versicherungen', interior_decoration: 'Wohn- und Dekogeschäfte', it: 'IT-Dienstleister', jewelry: 'Juweliere', kindergarten: 'Kindergärten', kiosk: 'Kioske', kitchen: 'Küchenstudios',
+    laboratory: 'Labore', laundry: 'Wäschereien', lawyer: 'Rechtsanwälte', library: 'Bibliotheken', lighting: 'Lampengeschäfte', locksmith: 'Schlüsseldienste', marketplace: 'Marktplätze', massage: 'Massagepraxen',
+    medical_supply: 'Sanitätshäuser', mobile_phone: 'Handyläden', motorcycle: 'Motorradhändler', moving_company: 'Umzugsunternehmen', museum: 'Museen', nightclub: 'Nachtclubs', notary: 'Notare', nursing_home: 'Pflegeheime',
+    occupational_therapist: 'Ergotherapien', optician: 'Optiker', outdoor: 'Outdoorgeschäfte', paint: 'Farbengeschäfte', parcel_locker: 'Paketstationen', pet: 'Tierbedarfsläden', pharmacy: 'Apotheken', photo: 'Fotogeschäfte',
+    physiotherapist: 'Physiotherapien', picnic_site: 'Rastplätze', place_of_worship: 'Kirchen', political_party: 'Parteibüros', post_depot: 'Zustellstützpunkte', post_office: 'Postfilialen', pottery: 'Töpfereien',
+    property_management: 'Hausverwaltungen', pub: 'Kneipen', public_bookcase: 'Bücherschränke', registered_association: 'Vereine (e. V.)', restaurant: 'Restaurants', school: 'Schulen', shoes: 'Schuhgeschäfte',
+    social_facility: 'Sozialeinrichtungen', social_services: 'Sozialdienste', speech_therapist: 'Logopädien', stationery: 'Schreibwarenläden', supermarket: 'Supermärkte', tattoo: 'Tattoostudios', tax_advisor: 'Steuerberater',
+    telecommunication: 'Telekommunikationsläden', theatre: 'Theater', therapist: 'Therapiepraxen', tiles: 'Fliesenhändler', tobacco: 'Tabakläden', tool_hire: 'Geräteverleihe', townhall: 'Rathäuser', toys: 'Spielwarengeschäfte',
+    training: 'Bildungsanbieter', travel_agency: 'Reisebüros', tyres: 'Reifenhändler', variety_store: 'Gemischtwarenläden', veterinary: 'Tierärzte', viewpoint: 'Aussichtspunkte', watches: 'Uhrengeschäfte',
+    'watches;jewelry': 'Uhren- und Schmuckgeschäfte', watering_place: 'Wasserstellen', weapons: 'Waffengeschäfte', weighbridge: 'Fahrzeugwaagen', yes: 'Büros', youth_centre: 'Jugendtreffs', flugschule: 'Flugschulen' };
+  const ART_SG = { antiques: 'Antiquitäten', art: 'Kunsthandel', association: 'Verein', car_parts: 'Autoteile', caravan_site: 'Wohnmobilstellplatz', charging_station: 'Ladestation', clinic: 'Klinik', cosmetics: 'Kosmetik',
+    coworking: 'Coworking', curtain: 'Gardinen', dry_cleaning: 'Reinigung', estate_agent: 'Immobilienmakler', fabric: 'Stoffe', ferry_terminal: 'Fähranleger', financial_advisor: 'Finanzberater', food_court: 'Food Court',
+    foundation: 'Stiftung', fountain: 'Brunnen', frame: 'Rahmengeschäft', funeral_directors: 'Bestatter', gallery: 'Galerie', healer: 'Heilpraktiker', hearing_aids: 'Hörgeräte', houseware: 'Haushaltswaren', it: 'IT-Dienstleister',
+    kitchen: 'Küchenstudio', laundry: 'Wäscherei', lawyer: 'Rechtsanwalt', library: 'Bibliothek', lighting: 'Lampen', locksmith: 'Schlüsseldienst', marketplace: 'Marktplatz', massage: 'Massage', medical_supply: 'Sanitätshaus',
+    moving_company: 'Umzugsunternehmen', notary: 'Notar', outdoor: 'Outdoor', paint: 'Farben', photo: 'Fotogeschäft', picnic_site: 'Rastplatz', political_party: 'Partei', post_depot: 'Zustellstützpunkt', pottery: 'Töpferei',
+    registered_association: 'Eingetragener Verein', social_services: 'Sozialdienst', tattoo: 'Tattoostudio', telecommunication: 'Telekommunikation', tiles: 'Fliesen', tobacco: 'Tabakwaren', tool_hire: 'Geräteverleih',
+    training: 'Bildungsanbieter', tyres: 'Reifen', veterinary: 'Tierarzt', watches: 'Uhren', 'watches;jewelry': 'Uhren und Schmuck', watering_place: 'Wasserstelle', weapons: 'Waffen', weighbridge: 'Fahrzeugwaage' };
+  Object.keys(ART_SG).forEach((k) => { if (!TYPE_DE[k]) TYPE_DE[k] = ART_SG[k]; });
   // Fachrichtung (OSM healthcare:speciality) in Worten
   const FA_DE = { general: 'Allgemeinmedizin', internal: 'Innere Medizin', paediatrics: 'Kinderheilkunde', gynaecology: 'Frauenheilkunde', otolaryngology: 'HNO', urology: 'Urologie', orthopaedics: 'Orthopädie',
     dermatology: 'Hautarzt', ophthalmology: 'Augenheilkunde', child_psychiatry: 'Kinder- und Jugendpsychiatrie', psychiatry: 'Psychiatrie', neurology: 'Neurologie', radiology: 'Radiologie', surgery: 'Chirurgie',
@@ -453,6 +530,13 @@
   const placeByName = (n) => PLACES.find((p) => p.name === n || p.n === n) || PLACES.find((p) => nameKey(p.n) === nameKey(n));
   PLACES.forEach((p) => { p.name = p.n; });
 
+  // Orte-Filter: Zustand und Sichtbarkeit (Bedienung weiter unten bei "Ortsliste")
+  const plGroups = Object.keys(GROUPS).filter((g) => PLACES.some((p) => p.g === g));
+  PLACES.forEach((p) => { p.ak = p.tl === 'Pension' ? 'guest_house' : p.tl === 'Flugschule' ? 'flugschule' : p.t; }); // Art-Schlüssel (nicht die Fachrichtung: alle Arztpraxen bleiben eine Art)
+  const plGroupActive = () => S.plSel.size > 0 && S.plSel.size < plGroups.length; // alle Kategorien angehakt zählt wie keine: alle Orte auf der Karte, keine Einzelheiten
+  const plVis = (g, a) => (!plGroupActive() || S.plSel.has(g)) && (!S.plTyp.size || S.plTyp.has(a));
+  let plRelax = false; // Art-Filter aktiv und wenige Treffer: Marker auch aus großer Höhe zeigen
+
   const nowB = () => AL.berlinParts(Date.now());
   const today = nowB();
   Object.assign(S.sun, { y: today.y, mo: today.mo, d: today.d, min: today.h * 60 + today.mi }); // Sonnenstand beginnt mit dem Datum und der Uhrzeit des Seitenaufrufs
@@ -481,7 +565,7 @@
     markers.push(m);
     return m;
   }
-  PLACES.forEach((p) => { p.marker = addMarker('poi', p.ic, p.x, 14, p.z, () => showPlace(p.i, true), p.name); p.marker.grp = p.g; });
+  PLACES.forEach((p) => { p.marker = addMarker('poi', p.ic, p.x, 14, p.z, () => showPlace(p.i, true), p.name); p.marker.grp = p.g; p.marker.ak = p.ak; });
   const STOPS = M.stops.map((s, i) => Object.assign({ i, g: -1 }, s));
 
   // VBB-Fahrplan (Sollfahrplan): OSM-Haltestellen den Haltestellengruppen des Feeds zuordnen
@@ -627,7 +711,7 @@
     const e2 = $('#legend2'), parts = [];
     if (S.L.hang) parts.push('<b>Hangneigung</b><span class="s">Geländeanalyse aus dem 10-m-Raster</span>' + lg('rgb(120,205,120)', '0,5 bis 1°') + lg('rgb(240,215,70)', '1 bis 2°') + lg('rgb(240,140,50)', '2 bis 4°') + lg('rgb(205,50,50)', 'über 4°'));
     if (S.L.senken) parts.push('<b>Geländesenken</b><span class="s">Tiefe unter der Überlaufhöhe (20-m-Raster). Auch Teiche, Gruben und Gräben, keine Gefahrenkarte.</span>' + lg('#96cdff', 'ab 0,3 m') + lg('#2c4dd0', 'ab 2 m'));
-    if (S.L.touren) parts.push('<b>Touren</b><span class="s">OpenStreetMap, Verlauf im Gebiet. Mehr unter „Touren“ auf der Startseite.</span>' + lg('#ff5aa5', 'Inline-Skaten') + lg('#3aa0ff', 'Radrouten') + lg('#7fd64f', 'Wanderwege'));
+    if (S.L.touren) parts.push('<b>Touren</b><span class="s">OpenStreetMap, Verlauf im Gebiet. Mehr unter „Touren“ auf der Startseite.</span>' + (trHas('Inline-Skaten') ? lg('#ff5aa5', 'Inline-Skaten') : '') + (trHas('Rad') ? lg('#3aa0ff', 'Radrouten') : '') + (trHas('Wandern') ? lg('#7fd64f', 'Wanderwege') : ''));
     e2.hidden = !parts.length; e2.innerHTML = parts.join('<hr>');
   }
   $('#nPlaces').textContent = PLACES.filter((p) => !p.nb).length;
@@ -642,12 +726,13 @@
   function updateMarkers() {
     const w = canvas.clientWidth, h = canvas.clientHeight, v = new THREE.Vector3(), far = view.dist > 1300;
     if (TR.mat) TR.mat.uniforms.uW.value = clamp(view.dist * 0.0016, 3.2, 90);
+    EXT.frame.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
     markers.forEach((m) => {
-      const on = m.cls === 'nf' ? S.L[m.grp] : m.cls === 'poi' ? S.L.places && (!S.plSel.size || S.plSel.has(m.grp)) : m.cls === 'ev' ? S.L.events : m.cls === 'ot' ? S.L.labels : m.cls === 'brw' ? S.L.brw : m.cls === 'veh' ? S.L.fahrzeuge : S.L.stops;
+      const on = m.cls === 'nf' ? S.L[m.grp] : m.cls === 'poi' ? S.L.places && plVis(m.grp, m.ak) : m.cls === 'ev' ? S.L.events : m.cls === 'ot' ? S.L.labels : m.cls === 'brw' ? S.L.brw : m.cls === 'veh' ? S.L.fahrzeuge : S.L.stops;
       v.copy(m.v).project(camera);
       const x = (v.x * 0.5 + 0.5) * w, y = (-v.y * 0.5 + 0.5) * h;
-      const near = m.cls === 'nf' ? view.dist < NFD[m.grp] && camera.position.distanceTo(m.v) < NFD[m.grp] * 1.3 : m.cls === 'ot' ? far : m.cls === 'brw' ? view.dist < 12000 : (!far || view.dist < 2600) && camera.position.distanceTo(m.v) < 1900;
-      const vis = on && near && v.z < 1 && x > -60 && x < w + 60 && y > -40 && y < h + 40;
+      const near = m.cls === 'nf' ? view.dist < NFD[m.grp] && camera.position.distanceTo(m.v) < NFD[m.grp] * 1.3 : m.cls === 'ot' ? far : m.cls === 'brw' ? view.dist < 12000 : m.cls === 'poi' && plRelax ? view.dist < 40000 : (!far || view.dist < 2600) && camera.position.distanceTo(m.v) < 1900;
+      const vis = !S.hideMk && on && near && v.z < 1 && x > -60 && x < w + 60 && y > -40 && y < h + 40;
       m.el.style.display = vis ? '' : 'none';
       if (vis) m.el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) translate(-50%,-100%)';
     });
@@ -745,6 +830,7 @@
     const s = S.sun, p = AL.sunPosition(new Date(AL.berlinToUTC(s.y, s.mo, s.d, Math.floor(s.min / 60), s.min % 60)), LAT, LON), altDeg = p.alt / rad;
     sunDir = sunVec(Math.max(p.alt, 0.02), p.bearing);
     const dayF = clamp((altDeg + 3) / 12, 0, 1);
+    S.sunAlt = altDeg; // Sonnenhöhe in Grad (Straßenlampen in js/ebenen.js)
     sun.intensity = 1.25 * dayF; sun.castShadow = S.L.shadows && altDeg > 0.5; hemi.intensity = 0.18 + 0.5 * dayF;
     scene.background.copy(altDeg > 6 ? SKY.day : altDeg > 0 ? SKY.tw.clone().lerp(SKY.day, altDeg / 6) : SKY.night.clone().lerp(SKY.tw, clamp((altDeg + 8) / 8, 0, 1)));
     S.dim = 0.22 + 0.78 * dayF;
@@ -838,10 +924,12 @@
       const p = hit.point.clone().addScaledVector(n, 0.4); p.y = Math.max(p.y, 1.0);
       selectBuilding(key, bi, p);
     } else if (hasG) {
+      if (S.L.touren && TR.routes.length && trPickRoute(gp.x, gp.z)) return; // Klick auf ein Tourenband wählt die Route
       clearSel(); gp.y = 1.5;
       const where = nearestAddr(gp.x, gp.z), q = BRW ? brwAt(gp.x, gp.z) : null;
-      if (q) openCard('<h3>Gewählte Stelle</h3><p class="sub">' + (where ? 'bei ' + esc(where) : 'ohne Adresse in der Nähe') + '</p><dl>' + brwRow(gp.x, gp.z) + '</dl>'
-        + (q.aussen ? '<p class="note">Land- und Forstwirtschaft, gemeindeweit: ' + esc(landLine()) + '.</p>' : '') + BRW_NOTE + sourceLine('BORIS Brandenburg (LGB), dl-de/by-2.0', 'https://www.govdata.de/dl-de/by-2-0'));
+      const ext = EXT.pick.map((f) => { try { return f(gp.x, gp.z) || ''; } catch (e) { return ''; } }).join(''); // Bebauungsplan, Flurstück (js/ebenen.js)
+      if (q || ext) openCard('<h3>Gewählte Stelle</h3><p class="sub">' + (where ? 'bei ' + esc(where) : 'ohne Adresse in der Nähe') + '</p>' + ext
+        + (q ? '<dl>' + brwRow(gp.x, gp.z) + '</dl>' + (q.aussen ? '<p class="note">Land- und Forstwirtschaft, gemeindeweit: ' + esc(landLine()) + '.</p>' : '') + BRW_NOTE + sourceLine('BORIS Brandenburg (LGB), dl-de/by-2.0', 'https://www.govdata.de/dl-de/by-2-0') : ''));
       else closeCard();
       setSpot(gp, 'Gewählte Stelle' + (where ? ' (bei ' + where + ')' : ''));
     }
@@ -899,6 +987,7 @@
       + (p.tel ? '<dt>Telefon</dt><dd><a href="tel:' + esc(String(p.tel).replace(/[^+\d]/g, '')) + '">' + esc(p.tel) + '</a></dd>' : '')
       + (p.mail && /^[^\s@<>"]+@[^\s@<>"]+$/.test(p.mail) ? '<dt>E-Mail</dt><dd><a href="mailto:' + esc(p.mail) + '">' + esc(p.mail) + '</a></dd>' : '') + '</dl>'
       + (web ? '<a href="' + esc(web) + '" target="_blank" rel="noopener">Webseite öffnen →</a>' : '<p class="note">Keine Webseite in OpenStreetMap hinterlegt.</p>')
+      + allArtBtn(p)
       + sourceLine('OpenStreetMap, Objekt ' + p.osm, 'https://www.openstreetmap.org/' + p.osm)
       + (p.wq && safeUrl(p.wq) && (p.wt || p.tel || p.mail || p.ohw) ? sourceLine('Zeiten und Kontakt: eigene Webseite, gelesen ' + fmtIso(p.wg), p.wq) : '')
       + (p.kq ? sourceLine(p.kq) : '');
@@ -998,7 +1087,7 @@
       if (!d) { box.innerHTML = '<p class="note">Live: Haltestelle im Echtzeitdienst nicht gefunden.</p>'; return; }
       const w = warnTexts(d), all = (d[arr ? 'arrivals' : 'departures'] || []).filter((x) => !s.mode || isRailDep(x) === (s.mode === 'rail')), list = all.filter(depRecentRail).slice(-4).concat(all.filter(depUpcoming).slice(0, 8)); // bis zu 4 Züge der letzten Stunde (grau), dann die nächsten
       box.innerHTML = '<div class="live"><b>Live, ' + (arr ? 'Ankünfte der nächsten 3 Stunden' : 'nächste 3 Stunden') + '</b>' + warnHtml(w) + (list.length ? '<div class="deps">' + list.map((x) => depRow(x, arr)).join('') + '</div>' : '<p class="note">In den nächsten 3 Stunden ' + (arr ? 'kommt hier laut Echtzeitdienst nichts an.' : 'fährt hier laut Echtzeitdienst nichts ab.') + '</p>')
-        + '<p class="note">Quelle: Echtzeitdaten (' + BETR + ') über ' + vbbHostName() + ', Stand ' + (d.realtimeDataUpdatedAt ? clockFmt.format(new Date(d.realtimeDataUpdatedAt * 1000)) + ' Uhr' : 'unbekannt') + '. Inoffiziell, ohne Gewähr. <a href="#" data-vbb-off>Live-Daten ausblenden</a></p></div>';
+        + '<p class="note">Quelle: Echtzeitdaten (' + BETR + ') über ' + vbbHostName() + ', Stand ' + (d.realtimeDataUpdatedAt ? clockFmt.format(new Date(d.realtimeDataUpdatedAt * 1000)) + ' Uhr' : 'unbekannt') + '. Inoffiziell, ohne Gewähr. Maßgeblich ist die Beschilderung vor Ort. Nutzung auf eigene Gefahr. <a href="#" data-vbb-off>Live-Daten ausblenden</a></p></div>';
       bindVbb(box, again);
     } catch (e) { box.innerHTML = '<p class="note">Live-Daten zurzeit nicht abrufbar: Die Dienste antworten nicht. <a href="#" data-vbb-retry>Erneut versuchen</a> · <a href="#" data-vbb-off>Live-Daten ausblenden</a></p>'; }
   }
@@ -1078,6 +1167,36 @@
     const lam = (o) => new THREE.MeshLambertMaterial(o);
     return (fzKit[kind] = { side: lam({ map: side }), front: lam({ map: front }), plain: lam({ color: L.up }), roof: lam({ color: '#9aa3ad' }), floor: lam({ color: '#222a32' }) });
   }
+  // ---- Nachtbeleuchtung der Fahrzeuge: Scheinwerfer und Rücklichter als leuchtende Sprites, Lichtkegel als flacher Fleck vor dem Fahrzeug.
+  // Keine echten Lichtquellen. Stärke NACHT.f (0 bis 1) setzt js/ebenen.js nach dem Sonnenstand (gleicher Auslöser wie die Straßenlampen).
+  const NACHT = { f: 0, mats: null };
+  function nachtMats() {
+    if (NACHT.mats) return NACHT.mats;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.8)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    const glow = new THREE.CanvasTexture(cv);
+    const spr = (c) => new THREE.SpriteMaterial({ map: glow, color: c, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
+    const cone = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -12, polygonOffsetUnits: -12, uniforms: { uFade: { value: 0 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform float uFade; varying vec2 vUv; void main(){ float along = vUv.x; float w = mix(0.12, 0.5, along); float side = 1.0 - smoothstep(w * 0.6, w, abs(vUv.y - 0.5)); float a = side * smoothstep(0.0, 0.08, along) * (1.0 - along) * 0.55 * uFade; gl_FragColor = vec4(vec3(1.0, 0.9, 0.7) * a, a); }' });
+    return (NACHT.mats = { head: spr(0xfff4d6), tail: spr(0xff2a1a), cone });
+  }
+  function fzLights(g, len, w, yb) { // len: Gesamtlänge des Fahrzeugs (lokal, +x ist vorn)
+    const N = nachtMats(), L = new THREE.Group(), e = len / 2;
+    [-1, 1].forEach((sd) => {
+      const h = new THREE.Sprite(N.head); h.scale.set(3.2, 3.2, 1); h.position.set(e + 0.1, yb + 0.7, sd * w * 0.33); L.add(h);
+      const t = new THREE.Sprite(N.tail); t.scale.set(1.8, 1.8, 1); t.position.set(-e - 0.1, yb + 0.7, sd * w * 0.33); L.add(t);
+    });
+    const c = new THREE.Mesh(new THREE.PlaneGeometry(32, 13).rotateX(-Math.PI / 2).translate(e + 16, 0.05, 0), N.cone); c.renderOrder = 13; L.add(c);
+    L.visible = false; g.add(L); g.userData.lights = L;
+  }
+  function setNacht(f) {
+    const N = nachtMats(); if (Math.abs(f - NACHT.f) < 0.002 && NACHT.set) return; NACHT.set = true; NACHT.f = f;
+    N.head.opacity = f; N.tail.opacity = f; N.cone.uniforms.uFade.value = f * 1.7;
+    FZ.list.forEach((v) => { if (v.g.userData.lights) v.g.userData.lights.visible = f > 0.002; }); S.dirty = true;
+  }
   function fzModel(kind) {
     const L = FZ_LOOK[kind], bus = kind === 'bus', k = fzKitFor(kind), g = new THREE.Group(), w = bus ? 2.5 : 2.9, h = bus ? 3.0 : 3.7, yb = bus ? 0.6 : 0.95;
     const part = (geo, mat, sx, sy, sz, x, y, z, shadow) => { const m = new THREE.Mesh(geo, mat); m.scale.set(sx, sy, sz); m.position.set(x, y, z); m.castShadow = !!shadow; return m; };
@@ -1093,7 +1212,9 @@
         [-0.22, 0.22].forEach((f) => g.add(part(fzGeo.box, fzM('#8d949b'), 2.8, 0.42, w * 0.5, cx + L.len * f, yb + h + 0.21, 0))); // Dachklimageräte
       }
     }
-    g.scale.setScalar(FZ.scale);
+    fzLights(g, L.cars * (L.len + 1.0) - 1.0, w, yb);
+    if (g.userData.lights) g.userData.lights.visible = NACHT.f > 0.002;
+    g.scale.setScalar(bus ? 1.0 : FZ.scale); // Busse in Originalgröße (12 m), Züge wie bisher vergrößert
     return g;
   }
   const fzX = (lon) => (lon - M.origin.lon) * 111320 * Math.cos(M.origin.lat * Math.PI / 180), fzZ = (lat) => -(lat - M.origin.lat) * 111132;
@@ -1389,7 +1510,7 @@
             + esc((arrMode ? 'von ' : '') + FP.heads[hi]) + '<span class="s">' + esc(opShortK(rt[2])) + '</span></span></div>';
         }).join('') + '</div>' + (sev ? '<p class="note">Grau-gelbe Linien: Bus unter einer Bahnliniennummer, vermutlich Schienenersatzverkehr (Schlussfolgerung aus den Daten).</p>' : '');
       }
-      html += '<p class="note">Sollfahrplan ohne Echtzeit, ohne Gewähr. Abweichungen, Baustellen und Ausfälle sind nicht enthalten.</p>';
+      html += '<p class="note haft">Fahrplan Sollzeiten, keine Echtzeit. Abweichungen, Baustellen und Ausfälle sind nicht enthalten. Angaben ohne Gewähr. Maßgeblich ist die Beschilderung vor Ort. Nutzung auf eigene Gefahr.</p>';
     }
     // Zwei Reiter statt zwei langer Listen untereinander: Live (nächste 3 Stunden) und Plan (Sollfahrplan der nächsten 24 Stunden bzw. des gewählten Tages)
     const plan = html.slice(planStart); html = html.slice(0, planStart);
@@ -1476,6 +1597,7 @@
     $$('.pill[data-panel]').forEach((b) => b.classList.toggle('on', b.dataset.panel === S.panel));
     document.body.classList.toggle('has-panel', !!S.panel);
     if (S.panel === 'sun') { applySun(); if (S.spot) scheduleSpot(); }
+    if (S.panel === 'touren') trPanelOpen();
     if (S.panel === 'traffic') {
       trafficFill();
       if (window.ALL && ORT.baustellen) window.ALL.baustellen($('#bauBox'));
@@ -1512,26 +1634,101 @@
   const evArea = $('#evArea');
   if (evArea && EV.some((e) => e.nbE)) { evArea.hidden = false; evArea.onchange = () => { S.evArea = evArea.value; renderEvents(); }; }
 
-  // Ortsliste
-  const plFilter = $('#plFilter');
-  [['', 'Alle']].concat(Object.keys(GROUPS).filter((g) => PLACES.some((p) => p.g === g)).map((g) => [g, GROUPS[g].icon + ' ' + GROUPS[g].label])).forEach(([k, l]) => {
-    const b = document.createElement('button'); b.className = 'chip' + (k === '' ? ' on' : ''); b.textContent = l; b.dataset.g = k; b.setAttribute('aria-pressed', k === '' ? 'true' : 'false');
-    b.onclick = () => { // Mehrfachauswahl: jede Gruppe lässt sich an- und abwählen, "Alle" hebt die Auswahl auf
+  // Ortsliste: oben nur die Hauptkategorien zum Anhaken. Erst bei einer Teilauswahl (nicht bei keiner, nicht bei allen) folgen die Arten und die einzelnen Orte; die Karte zeigt dann nur diese Orte.
+  const plFilter = $('#plFilter'), plTypes = $('#plTypes'), plActive = $('#plActive'), plListEl = $('#plList'), plArea = $('#plArea');
+  const plAreaOk = (p) => S.plArea === 'all' || (S.plArea === 'nb') === !!p.nb;
+  const plIn = (p) => plVis(p.g, p.ak);
+  const artPl = (ak) => ART_PL[ak] || TYPE_DE[ak] || String(ak).replace(/_/g, ' ');
+  const setChip = (x, on) => { x.classList.toggle('on', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); };
+  [['', 'Alle']].concat(plGroups.map((g) => [g, GROUPS[g].icon + ' ' + GROUPS[g].label])).forEach(([k, l]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip' + (k === '' ? ' on' : ''); b.textContent = l; b.dataset.g = k; b.setAttribute('aria-pressed', k === '' ? 'true' : 'false');
+    b.onclick = () => { // Mehrfachauswahl: jede Kategorie lässt sich an- und abwählen, "Alle" hebt die Auswahl auf
       if (k === '') S.plSel.clear(); else if (S.plSel.has(k)) S.plSel.delete(k); else S.plSel.add(k);
-      $$('.chip', plFilter).forEach((x) => { const on = x.dataset.g === '' ? S.plSel.size === 0 : S.plSel.has(x.dataset.g); x.classList.toggle('on', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
-      renderPlaces(); S.dirty = true; S.moved = true;
+      plChanged();
     };
     plFilter.appendChild(b);
   });
-  const plArea = $('#plArea');
+  plTypes.addEventListener('click', (e) => { // Arten innerhalb der angehakten Kategorien (feinerer Filter)
+    const b = e.target.closest ? e.target.closest('[data-a]') : null; if (!b) return;
+    const a = b.dataset.a;
+    if (a === '') S.plTyp.clear(); else if (S.plTyp.has(a)) S.plTyp.delete(a); else S.plTyp.add(a);
+    plChanged();
+    const nb = Array.from(plTypes.children).find((x) => x.dataset.a === a); if (nb) nb.focus(); // die Liste wird neu aufgebaut: Fokus auf dem Feld halten
+  });
+  function plClear() { S.plSel.clear(); S.plTyp.clear(); plChanged(); }
+  $('#plClear').onclick = () => { plClear(); if (plFilter.firstChild) plFilter.firstChild.focus(); };
   if (plArea && PLACES.some((p) => p.nb)) { plArea.hidden = false; plArea.onchange = () => { S.plArea = plArea.value; renderPlaces(); }; }
+  function plChanged() {
+    if (!plGroupActive()) S.plTyp.clear();
+    else { const ok = new Set(PLACES.filter((p) => S.plSel.has(p.g)).map((p) => p.ak)); S.plTyp.forEach((a) => { if (!ok.has(a)) S.plTyp.delete(a); }); }
+    plRelax = S.plTyp.size > 0 && PLACES.filter(plIn).length <= 120;
+    renderPlaces(); S.dirty = true; S.moved = true;
+  }
   function renderPlaces() {
-    const n = nowB();
-    $('#plList').innerHTML = PLACES.filter((p) => (!S.plSel.size || S.plSel.has(p.g)) && (S.plArea === 'all' || (S.plArea === 'nb') === !!p.nb)).map((p) => {
-      const st = AL.openStatus(p.oh, n);
-      return '<button class="item" data-pl="' + p.i + '"><span class="ic">' + p.ic + '</span><span><b>' + esc(p.name) + '</b><span class="s">' + esc(typeDe(p)) + (whereOf(p) ? ' · ' + esc(whereOf(p)) : '') + '</span><span class="tag ' + st.state + '">' + esc(st.text) + '</span></span></button>';
-    }).join('');
+    const n = nowB(), det = plGroupActive();
+    $$('.chip', plFilter).forEach((x) => setChip(x, x.dataset.g === '' ? S.plSel.size === 0 : S.plSel.has(x.dataset.g)));
+    const rows = det ? PLACES.filter((p) => plIn(p) && plAreaOk(p)) : [];
+    plActive.hidden = !det; plTypes.hidden = !det;
+    if (det) {
+      const what = S.plTyp.size ? Array.from(S.plTyp).map(artPl).sort((a, b) => a.localeCompare(b, 'de')) : Array.from(S.plSel).map((g) => GROUPS[g].label);
+      $('#plActiveTxt').innerHTML = 'Gefiltert: <b>' + esc(what.join(', ')) + '</b> (' + rows.length + (rows.length === 1 ? ' Ort' : ' Orte') + ')';
+      const cnt = new Map(); PLACES.forEach((p) => { if (S.plSel.has(p.g) && plAreaOk(p)) cnt.set(p.ak, (cnt.get(p.ak) || 0) + 1); });
+      S.plTyp.forEach((a) => { if (!cnt.has(a)) cnt.set(a, 0); });
+      const arts = Array.from(cnt.keys()).sort((a, b) => cnt.get(b) - cnt.get(a) || artPl(a).localeCompare(artPl(b), 'de'));
+      plTypes.innerHTML = '<button type="button" class="chip" data-a="">Alle Arten</button>' + arts.map((a) => '<button type="button" class="chip" data-a="' + esc(a) + '">' + esc(artPl(a)) + ' (' + cnt.get(a) + ')</button>').join('');
+      Array.from(plTypes.children).forEach((b) => setChip(b, b.dataset.a === '' ? S.plTyp.size === 0 : S.plTyp.has(b.dataset.a)));
+    }
+    plListEl.innerHTML = !det
+      ? '<p class="note">' + (S.plSel.size ? 'Alle Kategorien sind angehakt: Die Karte zeigt alle Orte. Einzelheiten gibt es erst bei einer Teilauswahl, sonst wäre die Liste zu lang.' : 'Kategorien anhaken: Dann zeigt die Karte nur diese Orte, und hier folgen die Arten und die einzelnen Orte. Ohne Haken zeigt die Karte alle Orte.') + '</p>'
+      : rows.length ? rows.map((p) => {
+        const st = AL.openStatus(p.oh, n);
+        return '<button class="item" data-pl="' + p.i + '"><span class="ic">' + p.ic + '</span><span><b>' + esc(p.name) + '</b><span class="s">' + esc(typeDe(p)) + (whereOf(p) ? ' · ' + esc(whereOf(p)) : '') + '</span><span class="tag ' + st.state + '">' + esc(st.text) + '</span></span></button>';
+      }).join('') : '<p class="note">Keine Orte dieser Auswahl im gewählten Gebiet.</p>';
     $$('#plList [data-pl]').forEach((b) => { b.onclick = () => showPlace(+b.dataset.pl, true); });
+    const fil = PLACES.filter((p) => !p.nb && plIn(p)).length; // Zähler am Dock: Orte der Gemeinde, bei aktivem Filter nur die gefilterten
+    $('#nPlaces').textContent = fil; $('#nPlaces').title = plGroupActive() ? 'Gefilterte Orte' : '';
+    $$('[data-allart]', cardBody).forEach((b) => { const q = PLACES[+b.dataset.allart]; b.textContent = allArtLabel(q); b.classList.toggle('on', artOn(q)); });
+  }
+  // Ortskarte: "Alle <Art> zeigen" filtert die Karte auf diese Art und rückt alle Orte der Art ins Bild
+  const allArtN = (p) => PLACES.filter((q) => q.ak === p.ak && !!q.nb === !!p.nb).length;
+  const artOn = (p) => plGroupActive() && S.plSel.size === 1 && S.plSel.has(p.g) && S.plTyp.size === 1 && S.plTyp.has(p.ak);
+  const allArtLabel = (p) => (artOn(p) ? 'Filter aufheben (nur ' + artPl(p.ak) + ')' : 'Alle ' + artPl(p.ak) + ' zeigen (' + allArtN(p) + ')');
+  function allArtBtn(p) {
+    if (plGroups.length < 2 || (allArtN(p) < 2 && !artOn(p))) return '';
+    return '<button type="button" class="chip allart' + (artOn(p) ? ' on' : '') + '" data-allart="' + p.i + '">' + esc(allArtLabel(p)) + '</button>';
+  }
+  cardBody.addEventListener('click', (e) => {
+    const b = e.target.closest ? e.target.closest('[data-allart]') : null; if (!b) return;
+    const p = PLACES[+b.dataset.allart]; if (!p) return;
+    if (artOn(p)) plClear(); else plShowArt(p);
+  });
+  function plShowArt(p) {
+    S.plSel = new Set([p.g]); S.plTyp = new Set([p.ak]);
+    if (S.plArea !== 'all' && (S.plArea === 'nb') !== !!p.nb) { S.plArea = 'all'; if (plArea) plArea.value = 'all'; } // Ort liegt im anderen Gebiet: Liste zeigt beide
+    if (!S.L.places) { S.L.places = true; const c = $('[data-layer=places]'); if (c) c.checked = true; applyLayers(); }
+    plChanged();
+    const pts = []; PLACES.forEach((q) => { if (q.ak === p.ak && !!q.nb === !!p.nb) pts.push(q.x, q.z); });
+    plFit(pts);
+  }
+  function plFit(pts) { // Kamera so, dass alle Punkte im Bild sind: neben der Ortskarte (Desktop) bzw. über ihr (Handy). Zielpunkt und Abstand werden mit einer Probekamera nachgerechnet.
+    if (!pts.length) return;
+    const th = view.theta, ct = Math.cos(th), st = Math.sin(th), phi = clamp(view.phi, 0.04, 0.9), cs = Math.max(Math.cos(phi), 0.35), sp = Math.sin(phi);
+    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (let k = 0; k + 1 < pts.length; k += 2) { if (pts[k] < x0) x0 = pts[k]; if (pts[k] > x1) x1 = pts[k]; if (pts[k + 1] < z0) z0 = pts[k + 1]; if (pts[k + 1] > z1) z1 = pts[k + 1]; }
+    const tanH = Math.tan(camera.fov * Math.PI / 360), cw = Math.max(1, canvas.clientWidth), ch = Math.max(1, canvas.clientHeight), cr = card.hidden ? null : card.getBoundingClientRect();
+    let pw = 0, tp = 0, bt = 110; const br = $('.brand');
+    if (innerWidth > 900) { if (cr) pw = Math.min(cw * 0.6, cw - cr.left + 28); } else { tp = br ? br.getBoundingClientRect().bottom + 8 : 0; bt = cr ? ch - cr.top + 8 : 150; }
+    const L = -0.88, Rr = 1 - 2 * pw / cw - 0.12, Bo = -1 + 2 * bt / ch, To = 1 - 2 * Math.max(tp, 24) / ch, dcx = (L + Rr) / 2, dcy = (Bo + To) / 2;
+    let tx = (x0 + x1) / 2, tz = (z0 + z1) / 2, dist = clamp(Math.max(x1 - x0, z1 - z0, 200) * 1.6 / (2 * tanH), 300, 36000);
+    const c2 = camera.clone(), v = new THREE.Vector3();
+    for (let it = 0; it < 7; it++) {
+      c2.position.set(tx + dist * sp * st, dist * Math.cos(phi), tz + dist * sp * ct); c2.near = Math.max(2, dist * 0.04); c2.far = Math.max(8000, dist * 6); c2.lookAt(tx, 0, tz); c2.updateProjectionMatrix(); c2.updateMatrixWorld(true);
+      let a0 = 1e9, a1 = -1e9, b0 = 1e9, b1 = -1e9;
+      for (let k = 0; k + 1 < pts.length; k += 2) { v.set(pts[k], 0, pts[k + 1]).project(c2); if (v.x < a0) a0 = v.x; if (v.x > a1) a1 = v.x; if (v.y < b0) b0 = v.y; if (v.y > b1) b1 = v.y; }
+      const f = clamp(Math.max((a1 - a0) / (Rr - L), (b1 - b0) / (To - Bo)), 0.4, 2.5), px = 2 * dist * tanH / ch, mx = ((a0 + a1) / 2 - dcx) * cw / 2 * px, mf = ((b0 + b1) / 2 - dcy) * ch / 2 * px / cs;
+      tx += mx * ct - mf * st; tz += -mx * st - mf * ct; dist = clamp(dist * f, 300, 36000);
+    }
+    flyTo({ tx, tz, phi, dist }, 1300);
   }
 
   // ------------------------------------------------------------------ Neuigkeiten (Wochenlauf: scripts/update_weekly.py)
@@ -1629,9 +1826,10 @@
     L: ['Straßenlampe', '💡', '#d9c24a', 'lampen'],
   };
   const NF = window.AL_NOTFALL;
+  const HAFT = 'Angaben ohne Gewähr, aus OpenStreetMap bzw. offenen Daten. Maßgeblich ist die Beschilderung vor Ort. Nutzung auf eigene Gefahr.'; // Kurzfassung des Haftungshinweises (Impressum, Abschnitt Haftungsausschluss)
   const NFHINT = {
-    notfall: 'Löschwasserangaben stammen von Mitwirkenden bei OpenStreetMap und können unvollständig oder veraltet sein. Ob und wie viel Löschwasser an dieser Stelle verfügbar ist, bestätigt nur die Feuerwehr oder der Wasserversorger.',
-    sirenen: 'Sirenenstandort laut OpenStreetMap, keine amtliche Liste. Ob die Sirene in Betrieb ist, ist nicht belegt.',
+    notfall: 'Löschwasserangaben stammen von Mitwirkenden bei OpenStreetMap und können unvollständig oder veraltet sein. Ob und wie viel Löschwasser an dieser Stelle verfügbar ist, bestätigt nur die Feuerwehr oder der Wasserversorger. ' + HAFT,
+    sirenen: 'Sirenenstandort laut OpenStreetMap, keine amtliche Liste. Ob die Sirene in Betrieb ist, ist nicht belegt. ' + HAFT,
     energie: 'Anlage laut OpenStreetMap, ohne Gewähr. Leistung und Betreiber stehen nur, wenn sie dort eingetragen sind.',
     freizeit: 'Eintrag aus OpenStreetMap, ohne Gewähr. Öffnungszeiten, Zustand und Nutzungsbedingungen bitte beim Betreiber oder vor Ort erfragen.',
     alltag: 'Eintrag aus OpenStreetMap, ohne Gewähr. Ob die Einrichtung vorhanden und nutzbar ist, kann abweichen.',
@@ -1662,34 +1860,185 @@
     el.innerHTML = (ORT.waldbrand ? '<div class="lg">' + A.brandHtml() + '</div>' : '') + (ORT.meldeportal ? '<div class="lg">' + A.maerkerHtml() + '</div>' : '') + (ORT.drohne ? '<div class="lg">' + A.drohneHtml() + '</div>' : '');
   })();
 
-  // ---- Touren (Rad, Wandern, Inline-Skaten aus OpenStreetMap, data/touren.js): Bänder auf dem Boden, Breite wächst mit der Entfernung
+  // ---- Touren (Rad, Wandern, Inline-Skaten aus OpenStreetMap, data/touren.js): Bänder auf dem Boden, Breite wächst mit der Entfernung.
+  // Bereich "Touren" im Dock: Liste nach Art (ausklappbar), Auswahl hebt eine Route hervor (breiter, heller, pulsierend), alle anderen werden blass.
+  // Links zu OpenStreetMap und Waymarked Trails sind reine Verweise: von dort wird nichts geladen.
   const TRCOL = { 'Inline-Skaten': [1, 0.35, 0.65], Rad: [0.23, 0.63, 1], Wandern: [0.5, 0.84, 0.31], Mountainbike: [0.91, 0.53, 0.23] };
+  const TRART = ['Inline-Skaten', 'Rad', 'Wandern', 'Mountainbike'];
+  const TRHEX = { 'Inline-Skaten': '#ff5aa5', Rad: '#3aa0ff', Wandern: '#7fd64f', Mountainbike: '#e8883a' };
+  const TRNAME = { 'Inline-Skaten': 'Inline-Skaten', Rad: 'Radrouten', Wandern: 'Wanderwege', Mountainbike: 'Mountainbike' };
+  const TRCHIP = { 'Inline-Skaten': 'Skate', Rad: 'Rad', Wandern: 'Wandern', Mountainbike: 'Mountainbike' };
+  const TRNETZ = { icn: 'international', ncn: 'national', rcn: 'regional', lcn: 'lokal', nwn: 'national', rwn: 'regional', lwn: 'lokal', regional: 'regional', local: 'lokal' };
+  const TRWM = { 'Inline-Skaten': 'skating', Rad: 'cycling', Wandern: 'hiking', Mountainbike: 'mtb' };
+  const de1 = (v) => String(Math.round(v * 10) / 10).replace('.', ',');
+  const trReduced = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  Object.assign(TR, { routes: [], kn: new Set(), sel: -1, only: false, filt: null, open: {} });
+  (function trInit() { // Routenliste aus den Rohdaten, unabhängig davon, ob die Ebene schon gebaut ist
+    const T0 = window.AL_TOUREN;
+    if (T0 && T0.routen) T0.routen.forEach((r, i) => {
+      let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+      r.lines.forEach((f) => { for (let k = 0; k + 1 < f.length; k += 2) { if (f[k] < x0) x0 = f[k]; if (f[k] > x1) x1 = f[k]; if (f[k + 1] < z0) z0 = f[k + 1]; if (f[k + 1] > z1) z1 = f[k + 1]; } });
+      const m = /^relation\/(\d+)$/.exec(r.id || '');
+      TR.routes.push({ r, i, ai: Math.max(0, TRART.indexOf(r.art)), num: m ? m[1] : '', box: [x0, z0, x1, z1] });
+      if (r.art === 'Rad' && /^\d+-\d+$/.test(r.name || '')) TR.kn.add(i); // Knotenpunkt-Verbindungen (z. B. "56-57") getrennt führen
+    });
+    if (TR.kn.size < 3) TR.kn.clear();
+    if (!TR.routes.length) { const p = $('.pill[data-panel=touren]'); if (p) p.style.display = 'none'; }
+  })();
   function buildTouren() {
-    const T = window.AL_TOUREN; if (TR.built || !T || !T.routen) return; TR.built = true;
-    const pos = [], off = [], col = [], idx = [];
-    T.routen.forEach((r, ri) => {
-      const y = 0.6 + ri * 0.05, c = TRCOL[r.art] || [1, 1, 1], w = r.art === 'Inline-Skaten' ? 1.25 : 1;
+    const T0 = window.AL_TOUREN; if (TR.built || !T0 || !T0.routen) return; TR.built = true;
+    const pos = [], off = [], col = [], meta = [], idx = [];
+    T0.routen.forEach((r, ri) => {
+      const y = 0.6 + ri * 0.05, c = TRCOL[r.art] || [1, 1, 1], w = r.art === 'Inline-Skaten' ? 1.25 : 1, ai = TR.routes[ri].ai;
       r.lines.forEach((f) => {
         const n = f.length / 2; if (n < 2) return;
         for (let i = 0; i < n; i++) {
           const x = f[i * 2], z = f[i * 2 + 1], a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
           let dx = f[b * 2] - f[a * 2], dz = f[b * 2 + 1] - f[a * 2 + 1]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
           const k = pos.length / 3;
-          pos.push(x, y, z, x, y, z); off.push(-dz * w, 0, dx * w, dz * w, 0, -dx * w); col.push(c[0], c[1], c[2], c[0], c[1], c[2]);
+          pos.push(x, y, z, x, y, z); off.push(-dz * w, 0, dx * w, dz * w, 0, -dx * w); col.push(c[0], c[1], c[2], c[0], c[1], c[2]); meta.push(ri, ai, -1, ri, ai, 1);
           if (i > 0) idx.push(k - 2, k - 1, k, k - 1, k + 1, k);
         }
       });
     });
     if (!pos.length) return;
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('off', new THREE.Float32BufferAttribute(off, 3)); g.setAttribute('col', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('off', new THREE.Float32BufferAttribute(off, 3)); g.setAttribute('col', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('meta', new THREE.Float32BufferAttribute(meta, 3)); g.setIndex(idx);
     TR.mat = new THREE.ShaderMaterial({
-      transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, uniforms: { uW: { value: 4 } },
-      vertexShader: 'attribute vec3 off; attribute vec3 col; uniform float uW; varying vec3 vC; void main(){ vC = col; gl_Position = projectionMatrix * modelViewMatrix * vec4(position + off * uW, 1.0); }',
-      fragmentShader: 'varying vec3 vC; void main(){ gl_FragColor = vec4(vC, 0.93); }',
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6,
+      uniforms: { uW: { value: 4 }, uSel: { value: -1 }, uOnly: { value: 0 }, uFilt: { value: -1 }, uTime: { value: 0 }, uPulse: { value: 0 }, uSelW: { value: 2.6 } },
+      // meta = (Routennummer, Art, Seite -1/+1): gewählte Route breiter, heller und pulsierend; die anderen blass oder (Nur diese Route / Artfilter) ausgeblendet
+      vertexShader: 'attribute vec3 off; attribute vec3 col; attribute vec3 meta; uniform float uW, uSel, uOnly, uFilt, uTime, uPulse, uSelW; varying vec3 vC; varying float vA, vS, vH;'
+        + 'void main(){ float has = uSel > -0.5 ? 1.0 : 0.0; float sel = (has > 0.5 && abs(meta.x - uSel) < 0.5) ? 1.0 : 0.0; float vis = (uFilt < -0.5 || abs(meta.y - uFilt) < 0.5) ? 1.0 : 0.0;'
+        + ' if (has > 0.5 && sel < 0.5 && uOnly > 0.5) vis = 0.0; float pl = sin(uTime * 3.6) * uPulse; float k = sel > 0.5 ? uSelW * (1.0 + 0.16 * pl) : 1.0;'
+        + ' vec3 p = position + off * uW * k; if (sel > 0.5) p.y += 0.5; vC = sel > 0.5 ? mix(col, vec3(1.0), 0.4 + 0.14 * pl) : col; vA = vis < 0.5 ? 0.0 : (has > 0.5 && sel < 0.5 ? 0.13 : 0.93); vS = meta.z; vH = sel;'
+        + ' gl_Position = vis < 0.5 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * modelViewMatrix * vec4(p, 1.0); }',
+      fragmentShader: 'varying vec3 vC; varying float vA, vS, vH; void main(){ vec3 c = vC; if (vH > 0.5) c = mix(c, vec3(0.07, 0.05, 0.03), smoothstep(0.55, 0.95, abs(vS)) * 0.8); gl_FragColor = vec4(c, vA); }',
     });
-    TR.mesh = new THREE.Mesh(g, TR.mat); TR.mesh.frustumCulled = false; TR.mesh.renderOrder = 6; scene.add(TR.mesh); S.dirty = true;
+    TR.mesh = new THREE.Mesh(g, TR.mat); TR.mesh.frustumCulled = false; TR.mesh.renderOrder = 6; scene.add(TR.mesh); S.dirty = true; trUniforms();
   }
+  function trHas(art) { return (TR.routes || []).some((R) => R.r.art === art); } // Legende: nur Arten, die es hier gibt
+  function trUniforms() {
+    if (!TR.mat) return;
+    const u = TR.mat.uniforms; u.uSel.value = TR.sel; u.uOnly.value = TR.only ? 1 : 0; u.uFilt.value = TR.filt == null ? -1 : TRART.indexOf(TR.filt); u.uPulse.value = TR.sel >= 0 && !trReduced() ? 1 : 0; S.dirty = true;
+  }
+  setInterval(() => { // Pulsieren der gewählten Route (nicht bei prefers-reduced-motion, nicht im Hintergrund-Tab)
+    if (TR.sel < 0 || !TR.mat || !S.L.touren || document.hidden || trReduced()) return;
+    TR.mat.uniforms.uTime.value = performance.now() / 1000; TR.mat.uniforms.uPulse.value = 1; S.dirty = true;
+  }, 70);
+  function trLayerOn() { S.L.touren = true; const c = $('[data-layer=touren]'); if (c) c.checked = true; applyLayers(); }
+  const trVisible = (R) => (TR.filt == null || R.r.art === TR.filt) && !(TR.only && TR.sel >= 0 && R.i !== TR.sel);
+  function trSegDist(f, px, pz) { // kleinster Abstand (m) eines Punkts zu einem Linienzug
+    let best = 1e18;
+    for (let k = 0; k + 3 < f.length; k += 2) {
+      const ax = f[k], az = f[k + 1], dx = f[k + 2] - ax, dz = f[k + 3] - az, l2 = dx * dx + dz * dz;
+      let t = l2 ? ((px - ax) * dx + (pz - az) * dz) / l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const ex = ax + t * dx - px, ez = az + t * dz - pz, d = ex * ex + ez * ez; if (d < best) best = d;
+    }
+    return Math.sqrt(best);
+  }
+  function trRouteAt(x, z) { // Route unter einer Stelle der Karte; bei überlagerten Routen wechselt jeder weitere Klick zur nächsten
+    const tol = Math.max(view.dist * 0.011, 7), cand = [];
+    TR.routes.forEach((R) => {
+      if (!trVisible(R) || x < R.box[0] - tol || x > R.box[2] + tol || z < R.box[1] - tol || z > R.box[3] + tol) return;
+      let d = 1e18; R.r.lines.forEach((f) => { d = Math.min(d, trSegDist(f, x, z)); });
+      if (d <= tol) cand.push({ i: R.i, d });
+    });
+    if (!cand.length) return -1;
+    const best = Math.min.apply(null, cand.map((c) => c.d)), near = cand.filter((c) => c.d <= best + Math.max(3, tol * 0.25)).map((c) => c.i).sort((a, b) => a - b);
+    const at = near.indexOf(TR.sel); return near.length > 1 && at >= 0 ? near[(at + 1) % near.length] : near[0];
+  }
+  function trPickRoute(x, z) { // Klick auf das Band in der Karte
+    const i = trRouteAt(x, z); if (i < 0) return false;
+    clearSel(); closeCard(); if (S.panel !== 'touren') openPanel('touren', true);
+    trSelect(i, { fly: false, scroll: true }); return true;
+  }
+  function trFly(i) { // Kamera auf die Route: Begrenzungsrahmen mit Rand; liegt im sichtbaren Teil neben (oder über) dem Bereich. Zielpunkt und Abstand werden mit einer Probekamera nachgerechnet (Perspektive und Neigung).
+    const R = TR.routes[i]; if (!R) return;
+    const th = view.theta, ct = Math.cos(th), st = Math.sin(th), phi = clamp(view.phi, 0.04, 0.9), cs = Math.max(Math.cos(phi), 0.35), sp = Math.sin(phi);
+    const pts = []; let tot = 0; R.r.lines.forEach((f) => { tot += f.length / 2; });
+    const stp = Math.max(1, Math.floor(tot / 300)); let n = 0, x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    R.r.lines.forEach((f) => { for (let k = 0; k + 1 < f.length; k += 2) { if (n++ % stp === 0 || k + 3 >= f.length) pts.push(f[k], f[k + 1]); if (f[k] < x0) x0 = f[k]; if (f[k] > x1) x1 = f[k]; if (f[k + 1] < z0) z0 = f[k + 1]; if (f[k + 1] > z1) z1 = f[k + 1]; } });
+    if (x0 > x1) return;
+    const tanH = Math.tan(camera.fov * Math.PI / 360), cw = Math.max(1, canvas.clientWidth), ch = Math.max(1, canvas.clientHeight), pn = $('#panel-touren');
+    let pw = 0, tp = 0, bt = 110; const br = $('.brand'), pOpen = S.panel === 'touren' && pn && !pn.hidden;
+    if (innerWidth > 900) { if (pOpen) pw = Math.min(cw * 0.6, pn.getBoundingClientRect().width + 28); } // Handy: Kopfbereich oben, Bereich oder Leiste unten verdecken die Karte
+    else { tp = br ? br.getBoundingClientRect().bottom + 8 : 0; bt = pOpen ? ch - pn.getBoundingClientRect().top + 8 : 150; }
+    const L = -0.9, Rr = 1 - 2 * pw / cw - 0.1, Bo = -1 + 2 * bt / ch, To = 1 - 2 * Math.max(tp, 24) / ch, dcx = (L + Rr) / 2, dcy = (Bo + To) / 2;
+    let tx = (x0 + x1) / 2, tz = (z0 + z1) / 2, dist = clamp(Math.max(x1 - x0, z1 - z0, 250) * 1.6 / (2 * tanH), 500, 36000);
+    const c2 = camera.clone(), v = new THREE.Vector3();
+    for (let it = 0; it < 7; it++) {
+      c2.position.set(tx + dist * sp * st, dist * Math.cos(phi), tz + dist * sp * ct); c2.near = Math.max(2, dist * 0.04); c2.far = Math.max(8000, dist * 6); c2.lookAt(tx, 0, tz); c2.updateProjectionMatrix(); c2.updateMatrixWorld(true);
+      let a0 = 1e9, a1 = -1e9, b0 = 1e9, b1 = -1e9;
+      for (let k = 0; k < pts.length; k += 2) { v.set(pts[k], 0, pts[k + 1]).project(c2); if (v.x < a0) a0 = v.x; if (v.x > a1) a1 = v.x; if (v.y < b0) b0 = v.y; if (v.y > b1) b1 = v.y; }
+      const f = clamp(Math.max((a1 - a0) / (Rr - L), (b1 - b0) / (To - Bo)), 0.4, 2.5), px = 2 * dist * tanH / ch, mx = ((a0 + a1) / 2 - dcx) * cw / 2 * px, mf = ((b0 + b1) / 2 - dcy) * ch / 2 * px / cs;
+      tx += mx * ct - mf * st; tz += -mx * st - mf * ct; dist = clamp(dist * f, 400, 36000);
+    }
+    flyTo({ tx, tz, phi, dist }, 1500);
+  }
+  function trSelect(i, o) { // i = Routennummer in AL_TOUREN.routen oder -1 (Auswahl aufheben)
+    o = o || {}; if (i >= 0 && !TR.routes[i]) i = -1;
+    TR.sel = i;
+    if (i < 0) TR.only = false;
+    else { const R = TR.routes[i]; if (TR.filt != null && R.r.art !== TR.filt) TR.filt = null; TR.open[TR.kn.has(i) ? R.r.art + '-kn' : R.r.art] = true; if (!S.L.touren) trLayerOn(); }
+    buildTouren(); trUniforms(); trRender(o.scroll !== false);
+    if (i >= 0 && o.fly !== false) trFly(i);
+  }
+  function trDetail(R) {
+    const r = R.r, rows = [], nz = (v) => v != null && v !== '';
+    rows.push(['Länge im Gebiet', de1(r.km_gem) + ' km']);
+    if (nz(r.km_gesamt)) rows.push(['Länge gesamt', de1(r.km_gesamt) + ' km']);
+    if (r.von && r.nach) rows.push(['Von - nach', esc(r.von) + ' - ' + esc(r.nach)]); else if (r.von) rows.push(['Von', esc(r.von)]); else if (r.nach) rows.push(['Nach', esc(r.nach)]);
+    if (TRNETZ[r.netz]) rows.push(['Netz', TRNETZ[r.netz]]);
+    if (r.betreiber) rows.push(['Betreiber', safeUrl(r.betreiber) ? '<a href="' + esc(r.betreiber) + '" target="_blank" rel="noopener">' + esc(r.betreiber.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '')) + '</a>' : esc(r.betreiber)]);
+    const lk = [];
+    if (safeUrl(r.web)) lk.push('<a href="' + esc(r.web) + '" target="_blank" rel="noopener">Weitere Informationen</a>');
+    if (R.num) {
+      lk.push('<a href="https://www.openstreetmap.org/relation/' + R.num + '" target="_blank" rel="noopener">Route bei OpenStreetMap</a>');
+      if (TRWM[r.art]) lk.push('<a href="https://' + TRWM[r.art] + '.waymarkedtrails.org/#route?id=' + R.num + '" target="_blank" rel="noopener">Route bei Waymarked Trails</a>');
+    }
+    return '<div class="tb-det"><dl class="tb-dl">' + rows.map((x) => '<dt>' + x[0] + '</dt><dd>' + x[1] + '</dd>').join('') + '</dl>'
+      + '<label class="tb-only"><input type="checkbox" id="trOnly"' + (TR.only ? ' checked' : '') + '> Nur diese Route zeigen</label>'
+      + '<div class="tb-act"><button type="button" class="chip" data-act="fly">Auf die Route zoomen</button><button type="button" class="chip" data-act="off">Auswahl aufheben</button></div>'
+      + (lk.length ? '<div class="tb-links">' + lk.join('') + '</div>' : '') + '</div>';
+  }
+  function trItem(R) {
+    const r = R.r, on = R.i === TR.sel;
+    return '<div class="tb-it' + (on ? ' on' : '') + '"><button type="button" class="tb-row" data-i="' + R.i + '" aria-expanded="' + (on ? 'true' : 'false') + '"><i style="background:' + (TRHEX[r.art] || '#fff') + '"></i>'
+      + '<span class="tb-n">' + esc(r.name) + (r.ref && r.ref !== r.name ? ' <small>' + esc(r.ref) + '</small>' : '') + '</span><span class="tb-k">' + de1(r.km_gem) + ' km</span></button>' + (on ? trDetail(R) : '') + '</div>';
+  }
+  function trRender(scroll) { // Filterchips und Routenliste neu aufbauen
+    const box = $('#trList'), fb = $('#trFilter'); if (!box || !fb) return;
+    const arts = TRART.filter((a) => TR.routes.some((R) => R.r.art === a)), cnt = (a) => TR.routes.filter((R) => a == null || R.r.art === a).length;
+    const intro = $('#trIntro'); if (intro) intro.innerHTML = '<b>' + TR.routes.length + ' Routen</b> aus OpenStreetMap im Kartengebiet. Eine Route anklicken oder in der Karte antippen: sie wird hervorgehoben, die anderen werden blass.';
+    fb.hidden = arts.length < 2;
+    fb.innerHTML = [null].concat(arts).map((a) => '<button type="button" class="chip' + (TR.filt === a ? ' on' : '') + '" data-f="' + (a || '') + '" aria-pressed="' + (TR.filt === a ? 'true' : 'false') + '">' + (a ? TRCHIP[a] : 'Alle') + ' <small>' + cnt(a) + '</small></button>').join('');
+    box.innerHTML = arts.filter((a) => TR.filt == null || a === TR.filt).map((a) => {
+      const all = TR.routes.filter((R) => R.r.art === a), rs = all.filter((R) => !TR.kn.has(R.i)), kn = all.filter((R) => TR.kn.has(R.i));
+      return '<details class="tb-grp" data-k="' + a + '"' + (TR.open[a] !== false ? ' open' : '') + '><summary><i style="background:' + TRHEX[a] + '"></i><b>' + TRNAME[a] + '</b><span>' + all.length + (all.length === 1 ? ' Route' : ' Routen') + '</span></summary>'
+        + rs.map(trItem).join('')
+        + (kn.length ? '<details class="tb-grp tb-kn" data-k="' + a + '-kn"' + (TR.open[a + '-kn'] ? ' open' : '') + '><summary><b>Knotenpunkt-Verbindungen</b><span>' + kn.length + '</span></summary>' + kn.map(trItem).join('') + '</details>' : '') + '</details>';
+    }).join('');
+    if (scroll && TR.sel >= 0) { const el = box.querySelector('.tb-it.on'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); }
+  }
+  function trPanelOpen() { if (!S.L.touren) trLayerOn(); trRender(true); }
+  (function trUi() {
+    const box = $('#trList'), fb = $('#trFilter'); if (!box || !fb) return;
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('.tb-row'), a = e.target.closest('[data-act]');
+      if (b) trSelect(TR.sel === +b.dataset.i ? -1 : +b.dataset.i);
+      else if (a && a.dataset.act === 'off') trSelect(-1);
+      else if (a && a.dataset.act === 'fly') trFly(TR.sel);
+    });
+    box.addEventListener('change', (e) => { if (e.target.id === 'trOnly') { TR.only = e.target.checked; trUniforms(); } });
+    box.addEventListener('toggle', (e) => { const d = e.target; if (d && d.dataset && d.dataset.k) TR.open[d.dataset.k] = d.open; }, true);
+    fb.addEventListener('click', (e) => {
+      const c = e.target.closest('.chip'); if (!c) return;
+      TR.filt = c.dataset.f || null;
+      if (TR.sel >= 0 && TR.filt != null && TR.routes[TR.sel].r.art !== TR.filt) { TR.sel = -1; TR.only = false; }
+      trUniforms(); trRender(true);
+    });
+  })();
   function applyLayers() {
     ground.visible = S.L.photo; flat.visible = !S.L.photo; if (!S.L.photo) ensureAreas();
     for (const k in T) { const t = T[k]; if (t.bld && t.bld.mesh) t.bld.mesh.visible = S.L.buildings; if (t.trees && t.trees.mesh) t.trees.mesh.visible = S.L.trees; }
@@ -1702,12 +2051,13 @@
         o.busy = true;
         new THREE.TextureLoader().load('img/' + o.k + '.png?v=' + (window.AL_TV || ''), (t) => {
           t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
-          const m = new THREE.Mesh(planeGeo(W, H), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: o.k === 'hang' ? 0.75 : 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -o.o, polygonOffsetUnits: -o.o }));
+          const m = new THREE.Mesh(planeGeo(W, H), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: o.k === 'hang' ? 0.75 : o.k === 'glasfaser' ? 0.6 : 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -o.o, polygonOffsetUnits: -o.o }));
           m.position.set(CX, 0.05 + o.o * 0.03, CZ); m.renderOrder = o.o; m.visible = S.L[o.k]; scene.add(m); o.mesh = m; S.dirty = true;
         });
       }
       if (o.mesh) o.mesh.visible = S.L[o.k];
     });
+    EXT.layer.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
     borders.visible = S.L.borders; brwGroup.visible = S.L.brw; updateLegend(); $('#sunShadows').checked = S.L.shadows; applySun(); S.moved = true; S.dirty = true;
   }
   if (!ORT.gelaende) { const rl = $('[data-layer=relief]'); if (rl && rl.closest('label')) rl.closest('label').hidden = true; } // Relief nur mit DGM (ort.json: bausteine.gelaende)
@@ -1718,16 +2068,17 @@
       applyLayers();
     };
   });
-  $('#sourcesBody').innerHTML = '<ul>'
+  $('#sourcesBody').innerHTML = '<p class="note haft">' + HAFT + '</p><ul>'
     + '<li><b>Luftbild, Gebäude (3D, LoD2), Adressen:</b> © GeoBasis-DE/LGB, <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener">dl-de/by-2-0</a> (Daten geändert). Landesvermessung und Geobasisinformation Brandenburg. ' + M.nBuildings + ' Gebäude, ' + M.nAddr + ' Adressen, Stand ' + esc(M.stand) + '. Das Luftbild ist ein Abzug mit 1 bis 2 m je Bildpunkt, nicht das Original mit 20 cm.</li>'
     + '<li><b>Straßen, Orte, Haltestellen, Flächen, Grenzen, Öffnungszeiten:</b> © OpenStreetMap-Mitwirkende, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">ODbL</a>. Öffnungszeiten stammen aus OSM und können veraltet sein.</li>'
     + (BRW ? '<li><b>Bodenrichtwerte:</b> BORIS Brandenburg (Gutachterausschuss, bereitgestellt vom LGB), © GeoBasis-DE/LGB, <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener">dl-de/by-2-0</a> (Daten geändert), Stichtag ' + esc(fmtIso(BRW.stichtag)) + '. Zone und Werte wie veröffentlicht, nur Euro je m². Ein Bodenrichtwert ist ein durchschnittlicher Lagewert und kein Verkehrswert. Maßgeblich ist die amtliche Auskunft (<a href="https://boris.brandenburg.de" target="_blank" rel="noopener">BORIS Brandenburg</a>).</li>' : '')
+    + (ORT.parken ? '<li><b>Parkplätze und Parken am Straßenrand:</b> © OpenStreetMap-Mitwirkende, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">ODbL</a> (Ebene „Parkplätze“). <span id="pkQ">Die Zahlen erscheinen, sobald die Daten geladen sind.</span> Gebühr, Zeiten und Zugang stehen nur dort, wo Mitwirkende sie eingetragen haben, sonst zeigt die Karte „nicht in OpenStreetMap angegeben“. Maßgeblich ist die Beschilderung vor Ort.</li>' : '')
     + '<li><b>Bäume:</b> symbolisch. Sie werden in Waldflächen zufällig verteilt und zeigen keine echten Einzelbäume.</li>'
     + '<li><b>Geländehöhen und Relief:</b> Digitales Geländemodell (DGM) der LGB, © GeoBasis-DE/LGB, <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener">dl-de/by-2-0</a> (Daten geändert), auf 10 m gemittelt. Die Höhen (Meter über NHN) gelten für die Mitte des Gebäudes, Ortes oder Ortsteils. Das Relief ist stark überhöht (Faktor 6) und nur eine Schummerung auf dem Luftbild, das Gelände selbst bleibt flach.</li>'
     + '<li><b>Dachfarbe und Solar-Eignung:</b> Die Dachfarbe ist der mittlere Farbton des Dachs im Luftbild (© GeoBasis-DE/LGB, dl-de/by-2-0, Daten geändert). Schatten, Bäume und die Schrägsicht des Luftbilds verfälschen einzelne Dächer. Die Solar-Eignung rechnet aus Neigung und Ausrichtung der LoD2-Dachflächen die Strahlung relativ zur besten Lage (Süd, 35 Grad). Nutzbar sind 75 % einer geneigten und 50 % einer flachen Fläche bei 0,21 kWp je m², ' + SOL_KWH + ' kWh je kWp und Jahr bei bester Ausrichtung. Keine Verschattung, keine Statik, kein Denkmalschutz, keine Anlagenplanung: grobe Schätzung ohne Gewähr.</li>'
     + '<li><b>Ergänzte Gebäude:</b> Wo die Gebäudedaten der Landesvermessung ein Gebäude nicht enthalten (Neubauten, nicht erfasste Bauten, einzelne Kirchen), zeigt die Karte den Umriss aus OpenStreetMap (© OpenStreetMap-Mitwirkende, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">ODbL</a>) als einfachen Block mit flachem Dach. Höhen stammen aus OpenStreetMap oder sind nach der Gebäudeart geschätzt. In der Gebäudekarte steht dann „Umriss aus OpenStreetMap“.</li>'
     + (window.AL_GESCHICHTE ? '<li><b>Ortsgeschichte:</b> Texte aus der <a href="https://de.wikipedia.org/" target="_blank" rel="noopener">deutschsprachigen Wikipedia</a> (Artikel der Ortsteile, Abschnitt Geschichte, gekürzt), <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.de" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Autoren und Version stehen bei jedem Text. Gelesen am ' + esc(fmtIso(window.AL_GESCHICHTE.stand)) + '. Wikipedia kann sich ändern, maßgeblich ist der Artikel.</li>' : '')
-    + (ORT.touren ? '<li><b>Touren:</b> Routen aus OpenStreetMap (© OpenStreetMap-Mitwirkende, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">ODbL</a>)' + (window.AL_TOUREN && window.AL_TOUREN.wikivoyage ? ', Beschreibung aus <a href="' + esc(window.AL_TOUREN.wikivoyage.url) + '" target="_blank" rel="noopener">Wikivoyage</a> (CC BY-SA 4.0, mit Urhebernennung auf der Touren-Seite)' : '') + '. Zustand und Sperrungen vor Ort können abweichen.</li>' : '')
+    + (ORT.touren ? '<li><b>Touren:</b> Routen aus OpenStreetMap (© OpenStreetMap-Mitwirkende, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">ODbL</a>)' + (window.AL_TOUREN && window.AL_TOUREN.wikivoyage ? ', Beschreibung aus <a href="' + esc(window.AL_TOUREN.wikivoyage.url) + '" target="_blank" rel="noopener">Wikivoyage</a> (CC BY-SA 4.0, mit Urhebernennung auf der Touren-Seite)' : '') + '. Zustand und Sperrungen vor Ort können abweichen. Die Verweise „Route bei OpenStreetMap“ und „Route bei Waymarked Trails“ im Bereich Touren sind reine Links: <a href="https://waymarkedtrails.org/" target="_blank" rel="noopener">Waymarked Trails</a> zeigt dieselben OpenStreetMap-Daten, von dort werden weder Daten noch Kacheln geladen.</li>' : '')
     + (ORT.gelaende ? '<li><b>Hangneigung und Geländesenken:</b> Eigene Auswertung des Geländemodells der LGB (© GeoBasis-DE/LGB, dl-de/by-2-0, Daten geändert): Neigung aus dem 10-m-Raster, Senken durch Füllen auf einem 20-m-Raster. Eine Geländeanalyse, keine Gefahrenkarte: Teiche, Kiesgruben, Gräben und Dämme erscheinen mit. Keine Aussage zu Starkregen oder Überschwemmung.</li>' : '')
     + (ORT.notfall ? '<li><b>Löschwasser, Sirenen, Windräder, Biogas- und Solaranlagen, Flugplätze, Freizeit- und Alltagseinrichtungen (Spielplätze, Sport, Denkmale, Tafeln, Bänke, Unterstände, Automaten), Straßenlampen:</b> © OpenStreetMap-Mitwirkende, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">ODbL</a>' + (NF && NF.stand ? ', Stand ' + esc(fmtIso(NF.stand)) : '') + '. Von Mitwirkenden eingetragen, daher möglicherweise unvollständig oder veraltet. Maßgeblich sind Feuerwehr, Wasserversorger und Betreiber. Die Flugplätze ersetzen keine amtliche Auskunft zu Drohnen-Beschränkungen (<a href="https://maptool-dipul.dfs.de/?language=de" target="_blank" rel="noopener">dipul der Deutschen Flugsicherung</a>).</li>' : '')
     + (ORT.landwirt && window.AL_LANDW ? '<li><b>Bodenfeuchte und Agrarwetter:</b> Deutscher Wetterdienst (DWD), agrarmeteorologische Berechnungen (AMBAV, AMBETI) für die Station ' + esc(window.AL_LANDW.station.name) + ', <a href="https://www.dwd.de/DE/service/rechtliche_hinweise/rechtliche_hinweise_node.html" target="_blank" rel="noopener">CC BY 4.0</a>. Modellrechnung für typische Böden, keine Messung auf dem Acker, Stand ' + esc(fmtIso(window.AL_LANDW.stand)) + '.</li>' : '')
@@ -1833,13 +2184,14 @@
     });
   })();
   // ---- Link zum Teilen: Kamera, Ebenen, Einfärbung, Sonnenstand (nur wenn verstellt) und gewählter Ort stehen im Adressteil (#k=…); nichts davon verlässt den Browser
-  const LKEYS = ['photo', 'buildings', 'trees', 'places', 'stops', 'fahrzeuge', 'events', 'labels', 'borders', 'roads', 'shadows', 'brw', 'wolken', 'relief', 'hang', 'senken', 'notfall', 'sirenen', 'energie', 'flug', 'freizeit', 'alltag', 'lampen', 'touren'];
+  const LKEYS = ['photo', 'buildings', 'trees', 'places', 'stops', 'fahrzeuge', 'events', 'labels', 'borders', 'roads', 'shadows', 'brw', 'wolken', 'relief', 'hang', 'senken', 'notfall', 'sirenen', 'energie', 'flug', 'freizeit', 'alltag', 'lampen', 'touren', 'bplan', 'flurst', 'mobil', 'glasfaser', 'fotos', 'modelle', 'nachtlicht', 'verkehr', 'parken'];
   function toast(t) { const el = $('#toast'); if (!el) return; el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 2600); }
   function shareHash() {
     const r = (v, n) => +v.toFixed(n), n = nowB();
     const q = ['k=' + [r(view.tx, 0), r(view.tz, 0), r(view.theta, 3), r(view.phi, 3), r(view.dist, 0)].join(',')];
     q.push('l=' + LKEYS.filter((k) => S.L[k]).join('.'));
     if (S.colorMode !== 'nutzung') q.push('c=' + S.colorMode);
+    if (TR.sel >= 0 && TR.routes[TR.sel] && TR.routes[TR.sel].num) { q.push('route=' + TR.routes[TR.sel].num); if (TR.only) q.push('nur=1'); }
     if (S.sun.y !== n.y || S.sun.mo !== n.mo || S.sun.d !== n.d || Math.abs(S.sun.min - (n.h * 60 + n.mi)) > 30) q.push('s=' + [S.sun.y, S.sun.mo, S.sun.d, S.sun.min].join('-'));
     if (S.card && S.card.type === 'stop' && STOPS[S.card.i]) q.push('h=' + encodeURIComponent(STOPS[S.card.i].name || ''));
     else { const p = PLACES.find((x) => x.marker && x.marker.el.classList.contains('sel')); if (p && p.osm) q.push('o=' + encodeURIComponent(p.osm)); }
@@ -1862,6 +2214,11 @@
       applyLayers();
     }
     if (c && ['nutzung', 'hoehe', 'brw', 'dach', 'solar', 'einheitlich'].indexOf(c) >= 0) { const r = $('input[name=colormode][value=' + c + ']'); if (r) { r.checked = true; r.onchange(); } }
+    const rt = get('route'); // Tour: karte.html#route=<OSM-Relation>, optional &nur=1
+    if (rt && /^\d+$/.test(rt)) {
+      const ri = TR.routes.findIndex((R) => R.num === rt);
+      if (ri >= 0) { TR.only = get('nur') === '1'; if (!k && matchMedia('(min-width: 901px)').matches) openPanel('touren', true); trSelect(ri, { fly: !k, scroll: true }); }
+    }
     if (s && /^\d{4}-\d{1,2}-\d{1,2}-\d{1,4}$/.test(s)) { const a = s.split('-').map(Number); setSun({ y: a[0], mo: a[1], d: a[2], min: Math.min(1439, a[3]) }); }
     if (o) { const i = PLACES.findIndex((p) => p.osm === o); if (i >= 0) showPlace(i, false); }
     else if (hs) { const i = STOPS.findIndex((p) => p.name === hs); if (i >= 0) showStop(i); }
@@ -1870,6 +2227,22 @@
       Object.assign(view, { tx: a[0], tz: a[1], theta: a[2], phi: a[3], dist: a[4] }); applyView();
     }
   })();
+  // ---- Alle Symbole und Marker aus- und wieder einblenden (Schaltfläche und Taste H). Die gewählten Ebenen bleiben unverändert.
+  function setHideMk(on) {
+    S.hideMk = !!on; const b = $('#bMk');
+    if (b) { b.setAttribute('aria-pressed', S.hideMk ? 'true' : 'false'); b.classList.toggle('on', S.hideMk); b.title = (S.hideMk ? 'Symbole und Marker wieder einblenden' : 'Alle Symbole und Marker ausblenden') + ' (Taste H)'; b.setAttribute('aria-label', b.title); }
+    document.body.classList.toggle('mk-aus', S.hideMk); S.dirty = true;
+  }
+  if ($('#bMk')) $('#bMk').onclick = () => { setHideMk(!S.hideMk); toast(S.hideMk ? 'Symbole ausgeblendet (H blendet sie wieder ein)' : 'Symbole eingeblendet'); };
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || (e.key !== 'h' && e.key !== 'H')) return;
+    const t = e.target, tn = t && t.tagName; if (tn === 'INPUT' || tn === 'TEXTAREA' || tn === 'SELECT' || (t && t.isContentEditable)) return;
+    e.preventDefault(); $('#bMk') ? $('#bMk').click() : setHideMk(!S.hideMk);
+  });
+  setHideMk(false);
+  window.AL_APP = { THREE, S, EXT, scene, camera, view, renderer, addMarker, markers, NFD, openCard, closeCard, sourceLine, esc, safeUrl, flyTo, planeGeo, applyLayers, setHidden, toast, setNacht,
+    W, H, CX, CZ, X0, Z0, C, T, dirty: () => { S.dirty = true; }, tv: () => window.AL_TV || '' };
+  if (window.AL_EBENEN) window.AL_EBENEN(window.AL_APP); // js/ebenen.js wurde vor app.js geladen
   if (matchMedia('(max-width: 900px)').matches) $('#colorpanel').open = false; // auf kleinen Bildschirmen zugeklappt starten
   requestAnimationFrame(frame);
   setTimeout(hideLoading, 8000);

@@ -39,6 +39,8 @@ Die Vorlage bringt keine Texte mit. Wer die Seite betreibt, braucht in Deutschla
 
 Täglich (`scripts/taeglich.bat`): Waldbrandstufe und Bodenfeuchte, danach `versionieren.py` und, wenn `data/state/auto-veroeffentlichen.on` existiert, das Hochladen. Die Seite zeigt die Waldbrandstufe nur, wenn sie nicht älter als 36 Stunden ist; fällt der tägliche Lauf aus, verschwindet die Stufe und ein Verweis auf die amtliche Seite bleibt. Einplanen wie den Wochenlauf, nur mit `/SC DAILY /ST 08:30`.
 
+Zusatzebenen: Der Wochenlauf holt Parkplätze (`fetch_parkplaetze.py`), Bebauungspläne, Mobilität und Straßenfotos (`fetch_ebenen.py plaene mobil fotos`) und rechnet Lampen und Straßennetz (`prepare_lampen.py`, `prepare_verkehr.py`). Vierteljährlich von Hand: `python scripts/fetch_ebenen.py flurstuecke glasfaser` (Flurstücke sind der größte Abruf, bis zu zehn Minuten je Kachel).
+
 Selten (einmal im Jahr oder bei Bedarf): Klima (`fetch_klima.py`) und Ortsgeschichte (`fetch_ortsgeschichte.py`, Zweifelsfälle landen in `data/ergaenzung/ortsgeschichte_pruefen.json` und werden nicht angezeigt; eigene Artikeltitel in `data/ergaenzung/ortsgeschichte_titel.json`).
 
 Nicht wöchentlich: Gebäude und Adressen vierteljährlich (`python scripts/fetch.py addr lod2`, dazu `fetch_osm_gebaeude.py` für die ergänzenden Umrisse, danach `prepare_gemeinde.py`), Bodenrichtwerte jährlich nach dem Stichtag (`fetch_boris.py`, `prepare_brw.py`).

@@ -1,0 +1,35 @@
+/* Bereich "Touren" der 3D-Karte: ausklappbare Routenliste, Filterchips, Details. Nur Variablen des jeweiligen Kartenthemas (--ink, --muted, --cyan ...), daher unverändert für alle vier Seiten. Klassen mit Präfix tb- (tr- gehört der Touren-Seite). */
+#panel-touren .note { margin: 0 0 6px; }
+#panel-touren .chips { margin: 2px 0 6px; }
+#trFilter .chip small { opacity: .7; margin-left: 2px; font-size: 11px; }
+#trList { margin-top: 2px; }
+.tb-grp { border-top: 1px solid var(--line2); }
+#trList > .tb-grp:first-child { border-top: 0; }
+.tb-grp > summary { display: flex; align-items: center; gap: 8px; padding: 10px 2px; cursor: pointer; list-style: none; font-size: 13px; color: var(--ink); }
+.tb-grp > summary::-webkit-details-marker { display: none; }
+.tb-grp > summary::before { content: ''; flex: none; width: 6px; height: 6px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .2s; margin: 0 3px 0 1px; }
+.tb-grp[open] > summary::before { transform: rotate(45deg); }
+.tb-grp > summary i { flex: none; width: 16px; height: 5px; border-radius: 3px; }
+.tb-grp > summary b { font-weight: 600; }
+.tb-grp > summary span { margin-left: auto; color: var(--muted); font-size: 12px; }
+.tb-grp > summary:focus-visible, .tb-row:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; border-radius: 8px; }
+.tb-kn { border-top: 0; margin: 2px 0 4px 10px; }
+.tb-kn > summary { padding: 6px 2px; font-size: 12px; color: var(--ink2); }
+.tb-it { margin: 2px 0; border-radius: 10px; border: 1px solid transparent; }
+.tb-it.on { background: var(--cyan-bg); border-color: var(--cyan-line); }
+.tb-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 8px; border: 0; background: none; color: var(--ink); font: 400 13px/1.35 var(--sans); text-align: left; cursor: pointer; border-radius: 10px; }
+.tb-row:hover { background: rgba(255, 255, 255, .06); }
+.tb-row i { flex: none; width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 255, 255, .18); }
+.tb-n { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tb-n small { color: var(--muted); font-size: 11px; margin-left: 4px; }
+.tb-k { flex: none; color: var(--cyan-ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+.tb-it.on .tb-row { font-weight: 600; }
+.tb-det { padding: 2px 10px 10px 29px; font-size: 12.5px; }
+.tb-dl { margin: 0 0 8px; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
+.tb-dl dt { color: var(--muted); }
+.tb-dl dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.tb-only { display: flex; align-items: center; gap: 8px; margin: 6px 0; cursor: pointer; color: var(--ink2); }
+.tb-act { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.tb-links { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid var(--line2); }
+.tb-links a { font-size: 12.5px; }
+@media (max-width: 900px) { #panel-touren { top: auto; height: min(50vh, 440px); } #panel-touren > .note:last-of-type { display: none; } }

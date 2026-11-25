@@ -19,6 +19,14 @@ Stand 08.11.2026. **Grundsatz:** Auf die Karte kommen nur Daten und Funktionen m
 | Klima | DWD Climate Data Center, `observations_germany/climate/monthly/kl` | CC BY 4.0 | Deutschland, Stationen in `ort.json` |
 | Ortsgeschichte | Wikipedia (MediaWiki-API), Einleitung und Abschnitt Geschichte | CC BY-SA 4.0: Urheber, Version und Lizenz stehen an jedem Text | überall |
 | Touren | OpenStreetMap-Routenrelationen; optional Einleitung eines Wikivoyage-Artikels | ODbL; Wikivoyage CC BY-SA 4.0 | überall |
+| Parkplätze, Parkregeln am Straßenrand | OpenStreetMap über Overpass (`fetch_parkplaetze.py`); Gebühr, Zeiten und Zugang nur, wo Mitwirkende sie eingetragen haben | ODbL | überall |
+| P+R, Taxi, Carsharing, Mitfahrbänke, Fahrkarten | OpenStreetMap über Overpass (`fetch_ebenen.py mobil`) | ODbL | überall |
+| Glasfaser | Breitbandatlas der Bundesnetzagentur, Ebene „100-m-Gitter, Glasfaser FTTB/H“, als Bildebene auf den Ort zugeschnitten | © BNetzA, Datenstand siehe `bausteine.glasfaser` | Deutschland |
+| Straßenfotos | Panoramax, Wikimedia Commons, KartaView (Standort, Urheber, Lizenz je Bild; Commons ohne NC/ND). Das Bild lädt der Browser erst nach Klick vom Dienst | CC BY-SA bzw. freie Lizenz je Bild | überall |
+| Bebauungspläne und Satzungen | PLIS der Gemeinsamen Landesplanungsabteilung Berlin-Brandenburg (WFS, nur Geltungsbereiche) | dl-de/by-2-0, Daten geändert | **Brandenburg** |
+| Flurstücke | ALKIS der LGB (vereinfachtes Schema, ohne Eigentümer), je Kachel nachgeladen | dl-de/by-2-0, Daten geändert | **Brandenburg** |
+| Straßenlampen, Autoverkehr | echte Lampen und Straßennetz aus OpenStreetMap; übrige Lampen alle 35 m **symbolisch** ergänzt, Verkehr **Simulation** (Menge und Tempo angenommen) | ODbL | überall |
+| Eigene 3D-Modelle | vom Betreiber geliefert (`docs/MODELLE.md`), Quelle je Modell in der Karte | je Modell | optional |
 | Straßen, Orte, Haltestellen, Grenzen, Öffnungszeiten | OpenStreetMap über Overpass | ODbL | überall |
 | Fahrplan (Sollfahrplan, Fahrten) | GTFS-Feed des Verkehrsverbunds | im Beispiel VBB, CC BY 4.0 | je Feed, in `ort.json` |
 
@@ -54,4 +62,5 @@ Die Inhaltsrichtlinie (CSP) der Seiten wird in `scripts/baue_seiten.py` aus gena
 - **Dachfarbe:** mittlerer Farbton (Median) des Dachs im Luftbild. Das Luftbild ist kein echtes Orthophoto, hohe Gebäude kippen im Bild, Schatten und Bäume verfälschen einzelne Dächer. Nur eine Schätzung.
 - **Solar-Eignung:** Strahlung relativ zur besten Lage (Süd, 35 Grad) je LoD2-Dachfläche; nutzbar 75 % einer geneigten und 50 % einer flachen Fläche, 0,21 kWp je m², Jahresertrag aus `bausteine.solar_kwh_je_kwp` (Standard 980 kWh je kWp bei bester Ausrichtung, Mitteldeutschland). Ohne Verschattung, Statik, Denkmalschutz und Anlagenplanung: grobe Schätzung ohne Gewähr. Die Annahmen stehen auch im Quellen-Dialog der Karte.
 - **Gelände:** 10-m-Raster, Relief als Schummerung mit Faktor 6 überhöht, Höhenangaben je Gebäude und Ort (`hn`).
+- **Straßenlampen und Autoverkehr:** Nur die Lampen aus OpenStreetMap sind echt, die übrigen sind symbolisch ergänzt. Autos, Lkw und Motorräder sind eine Simulation auf dem Straßennetz: keine Verkehrszählung, keine Echtzeit.
 - **Fahrzeuge:** Miniaturmodelle nach Betreiber (Farben symbolisch, Wagenzahl angenommen). Ohne Live-Daten fahren sie nach dem Sollfahrplan (`data/fahrten.js`, gebaut von `scripts/prepare_fahrten.py`) und folgen dem Gleisnetz aus OpenStreetMap (`data/gleise.js`).

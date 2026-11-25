@@ -6,7 +6,8 @@ Schritte: 1. OSM live (Orte, Haltestellen)   fetch_live.py
           3. Seitendaten neu bauen           prepare_gemeinde.py
           4. Vergleich mit data/state/state.json -> site/data/news.js, Zustand fortschreiben
 Veroeffentlichen ist ein eigener Schritt (docs/VEROEFFENTLICHEN.md).
-Nicht woechentlich: Gebaeude und Adressen (LGB, vierteljaehrlich: fetch.py lod2 addr), Bodenrichtwerte (jaehrlich).
+Nicht woechentlich: Gebaeude und Adressen (LGB, vierteljaehrlich: fetch.py lod2 addr, dazu fetch_osm_gebaeude.py), Flurstuecke und Glasfaser (vierteljaehrlich:
+fetch_ebenen.py flurstuecke glasfaser), Bodenrichtwerte (jaehrlich).
 """
 import datetime as dt, json, os, re, subprocess, sys, urllib.request, zipfile
 
@@ -30,9 +31,9 @@ def log(*a):
     print(dt.datetime.now().strftime("%H:%M:%S"), *a, flush=True)
 
 
-def run(script, must=True):
-    log("Schritt:", script)
-    r = subprocess.run([sys.executable, os.path.join(HERE, script)], cwd=ROOT)
+def run(script, must=True, *args):
+    log("Schritt:", script, *args)
+    r = subprocess.run([sys.executable, os.path.join(HERE, script)] + list(args), cwd=ROOT)
     if r.returncode:
         if must:
             sys.exit("Abbruch: %s endete mit Code %d" % (script, r.returncode))
@@ -152,6 +153,10 @@ def main():
     run("fetch_waldbrand.py", must=False)  # Waldbrandstufe (bausteine.waldbrand, nur Brandenburg; taeglich: scripts/taeglich.bat)
     run("fetch_touren.py", must=False)  # Rad-, Wander- und Skate-Routen aus OSM (bausteine.touren)
     run("fetch_klima.py", must=False)  # Klima-Monatswerte der DWD-Stationen (bausteine.klima; aendern sich monatlich)
+    run("fetch_parkplaetze.py", must=False)  # Parkplaetze und Parkregeln am Strassenrand aus OSM (bausteine.parken; Overpass kann haengen: alter Stand bleibt)
+    run("fetch_ebenen.py", False, "plaene", "mobil", "fotos")  # Zusatzebenen, die sich oefter aendern (jede Phase nur bei eingeschaltetem Baustein); Flurstuecke und Glasfaser vierteljaehrlich von Hand
+    run("prepare_lampen.py", must=False)  # Strassenlampen fuer die Nachtansicht (bausteine.lampen; nach fetch_notfall.py, ohne Netz)
+    run("prepare_verkehr.py", must=False)  # Strassennetz fuer den simulierten Autoverkehr (bausteine.verkehr, ohne Netz)
 
     new = snapshot()
     old = json.load(open(STATE, encoding="utf-8")) if os.path.exists(STATE) and "--no-state" not in a else None

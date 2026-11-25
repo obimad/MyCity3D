@@ -22,6 +22,7 @@ SCHRITTE = [
     ("Gelaende (DGM) holen, nur Brandenburg: ort.json bausteine.gelaende", ["fetch_dgm.py"]),
     ("Gebaeudeumrisse aus OpenStreetMap holen (fuellen Luecken der Gebaeudedaten)", ["fetch_osm_gebaeude.py"]),
     ("Bodenrichtwerte holen (BORIS)", ["fetch_boris.py"]),
+    ("Zusatzebenen holen (nur eingeschaltete Bausteine: Bebauungsplaene, Flurstuecke, Mobilitaet, Glasfaser, Strassenfotos)", ["fetch_ebenen.py"]),
     ("Wochenlauf: Orte, Fahrplan, Seitendaten, Seiten bauen", ["update_weekly.py", "--no-state"]),
     ("Bodenrichtwerte aufbereiten", ["prepare_brw.py"]),
     ("Aktualisierungsstand neu schreiben (jetzt mit Bodenrichtwerten)", ["schreibe_stand.py"]),

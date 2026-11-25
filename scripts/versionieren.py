@@ -23,7 +23,15 @@ def kachelkennung():
     for fn in sorted(os.listdir(d)):
         if re.match(r"t_\d+_\d+\.js$", fn) or fn == "areas.js":
             h.update(fn.encode()); h.update(open(os.path.join(d, fn), "rb").read())
-    for nm in ("relief.png", "hang.png", "senken.png"):
+    for fn in ("mobil.js", "parken.js", "plaene.js", "fotos.js", "fs_index.js", "lampen.js", "glasfaser.js", "verkehr.js", "modelle.js", "modelle_quellen.js"):  # Zusatzebenen, erst beim Einschalten geladen (js/ebenen.js)
+        fp = os.path.join(d, fn)
+        if os.path.exists(fp):
+            h.update(fn.encode()); h.update(open(fp, "rb").read())
+    for sub in (os.path.join(d, "fs"), os.path.join(SITE, "models")):  # Flurstueckskacheln und eigene 3D-Modelle
+        if os.path.isdir(sub):
+            for fn in sorted(os.listdir(sub)):
+                h.update(fn.encode()); h.update(open(os.path.join(sub, fn), "rb").read())
+    for nm in ("relief.png", "hang.png", "senken.png", "glasfaser.png"):
         rp = os.path.join(SITE, "img", nm)
         if os.path.exists(rp):
             h.update(open(rp, "rb").read())

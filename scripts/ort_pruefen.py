@@ -51,6 +51,13 @@ if (bs.get("baustellen") or bs.get("gelaende")) and (ORT["land"].get("kennung") 
     fehler.append("bausteine.baustellen und bausteine.gelaende nutzen Dienste des Landes Brandenburg: fuer andere Laender auf false setzen")
 if bs.get("waldbrand") and ORT["land"].get("kennung") != "BB":
     fehler.append("bausteine.waldbrand liest die Seite des Landes Brandenburg: fuer andere Laender auf null setzen")
+for k in ("bplan", "flurstuecke"):
+    if bs.get(k) and ORT["land"].get("kennung") != "BB":
+        fehler.append("bausteine.%s nutzt Dienste des Landes Brandenburg: fuer andere Laender auf false setzen" % k)
+if bs.get("modelle"):
+    warn.append("bausteine.modelle ist an: site/data/modelle.js und site/models/ muessen von dir kommen (docs/MODELLE.md), die Vorlage liefert keine Modelle")
+if bs.get("lampen") and not bs.get("notfall"):
+    warn.append("bausteine.lampen ohne bausteine.notfall: es gibt nur symbolische Lampen, keine echten aus OpenStreetMap")
 w = bs.get("webcam")
 if w and not str(w.get("url", "")).startswith("https://"):
     fehler.append("bausteine.webcam.url muss eine https-Adresse sein (oder webcam auf null setzen)")

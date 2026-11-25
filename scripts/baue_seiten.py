@@ -48,6 +48,15 @@ def bausteine():
         "geschichte": bool(b.get("ortsgeschichte")),
         "touren": bool(b.get("touren")),
         "webcam": cam if cam.get("url") else None,
+        "nachtlicht": bool(b.get("lampen")),
+        "verkehr": bool(b.get("verkehr")),
+        "modelle": bool(b.get("modelle")),
+        "bplan": bool(b.get("bplan")),
+        "flurst": bool(b.get("flurstuecke")),
+        "mobil": bool(b.get("mobil")),
+        "glasfaser": bool(b.get("glasfaser")),
+        "fotos": bool(b.get("fotos")),
+        "parken": bool(b.get("parken")),
     }
 
 
@@ -56,6 +65,9 @@ def features():
     b = bausteine()
     f = {k: bool(v) for k, v in b.items()}
     f["ebenen"] = f["notfall"] or f["gelaende"] or f["touren"]  # Rubrik "Landwirtschaft und Sicherheit" bei den Ebenen
+    f["planen"] = f["bplan"] or f["flurst"]  # Rubrik "Planen und Grundstuecke" bei den Ebenen
+    f["mobilitaet"] = f["parken"] or f["mobil"] or f["glasfaser"] or f["fotos"]  # Rubrik "Mobilitaet, Internet, Fotos"
+    f["ebenen_js"] = any(f[k] for k in ("nachtlicht", "verkehr", "modelle", "bplan", "flurst", "mobil", "glasfaser", "fotos"))  # js/ebenen.js wird geladen
     f["landwirt"] = f["bodenfeuchte"] or f["waldbrand"] or f["meldeportal"] or f["drohne"]  # Rubrik "Landwirtschaft und Sicherheit"
     return f
 
@@ -79,14 +91,34 @@ def optionale_dateien():
     if f["geschichte"]:
         out += ["data/ortsgeschichte.js"]
     if f["touren"]:
-        out += ["touren.html", "touren.js", "data/touren.js"]
+        out += ["touren.html", "touren.js", "data/touren.js", "karte-touren.css"]
+    if f["ebenen_js"]:
+        out += ["js/ebenen.js"]
+    if f["parken"]:
+        out += ["js/parken.js", "karte-parken.css", "data/parken.js"]
+    if f["modelle"]:
+        out += ["data/modelle.js"]
+    if f["glasfaser"]:
+        out += ["img/glasfaser.png", "data/glasfaser.js"]
+    if f["nachtlicht"]:
+        out += ["data/lampen.js"]
+    if f["verkehr"]:
+        out += ["data/verkehr.js"]
+    if f["mobil"]:
+        out += ["data/mobil.js"]
+    if f["fotos"]:
+        out += ["data/fotos.js"]
+    if f["bplan"]:
+        out += ["data/plaene.js"]
+    if f["flurst"]:
+        out += ["data/fs_index.js"]
     return out
 
 
 # Datendateien, die die Seiten laden: bis das jeweilige Skript sie erzeugt hat, steht ein leerer Platzhalter da (kein 404)
 PLATZHALTER = {
     "landwirt.js": "AL_LANDW", "waldbrand.js": "AL_WALDBRAND", "klima.js": "AL_KLIMA",
-    "notfall.js": "AL_NOTFALL", "ortsgeschichte.js": "AL_GESCHICHTE", "touren.js": "AL_TOUREN",
+    "notfall.js": "AL_NOTFALL", "ortsgeschichte.js": "AL_GESCHICHTE", "touren.js": "AL_TOUREN", "modelle.js": "AL_MODELLE_LISTE",
 }
 
 
@@ -103,6 +135,8 @@ def csp():
     if b["webcam"]:
         u = urlparse(b["webcam"]["url"])
         img += " %s://%s" % (u.scheme, u.netloc)
+    if b["fotos"]:  # Strassenfotos werden erst nach Klick geladen (Panoramax, Wikimedia Commons, KartaView)
+        img += " https://panoramax.openstreetmap.fr https://panoramax.mapcomplete.org https://thumb.wikimedia.org https://upload.wikimedia.org https://*.openstreetcam.org"
     s = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src " + img + "; font-src 'self'; connect-src "
          + " ".join(connect))
     if b["muell"]:
@@ -190,6 +224,8 @@ def ort_js():
         "solarKwh": (ORT.get("bausteine") or {}).get("solar_kwh_je_kwp"), "betreiberKuerzel": fp.get("betreiber_kuerzel", {}),
         "landwirt": f["bodenfeuchte"], "waldbrand": b["waldbrand"], "meldeportal": b["meldeportal"], "drohne": b["drohne"],
         "notfall": b["notfall"], "klima": b["klima"], "geschichte": b["geschichte"], "touren": b["touren"], "webcam": b["webcam"],
+        "nachtlicht": b["nachtlicht"], "verkehr": b["verkehr"], "modelle": b["modelle"], "bplan": b["bplan"], "flurst": b["flurst"],
+        "mobil": b["mobil"], "glasfaser": b["glasfaser"], "fotos": b["fotos"], "parken": b["parken"],
     }
     return "window.ORT = " + json.dumps(o, ensure_ascii=False) + ";\n"
 

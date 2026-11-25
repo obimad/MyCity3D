@@ -251,3 +251,20 @@ dialog li { margin: 6px 0; }
 /* Ortsgeschichte (Wikipedia-Text in der Ortsteil-Karte) */
 .ge-h { margin: 14px 0 4px; font: 600 12px/1.3 var(--mono); letter-spacing: .04em; color: var(--cyan-ink); }
 .ge { margin: 0 0 8px; font-size: 13px; line-height: 1.55; color: var(--ink2); }
+
+/* Zusatzebenen (js/ebenen.js), 25.11.2026 */
+.layers .lnote { display: block; opacity: .62; font-size: 11px; line-height: 1.3; margin-top: 2px; }
+.lglegend { font-size: 11px; line-height: 1.9; margin: -2px 0 6px 28px; opacity: .9; }
+.lglegend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 3px 0 6px; vertical-align: -1px; }
+.fotoimg { display: block; width: 100%; height: auto; border-radius: 10px; margin: 6px 0; background: rgba(255, 255, 255, .05); }
+#cardBody h4 { margin: 12px 0 4px; font-size: 14px; }
+.ctrl #bMk .strike { opacity: 0; }
+.ctrl #bMk.on { background: rgba(66, 214, 255, .18); }
+.ctrl #bMk.on .strike { opacity: 1; }
+body.mk-aus #markers { display: none; }
+/* Orte-Filter: Hinweiszeile "Gefiltert", Arten, Knopf "Alle ... zeigen" in der Ortskarte */
+.plactive { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 8px; padding: 8px 10px; border: 1px solid var(--cyan-line); background: var(--cyan-bg); border-radius: 12px; font-size: 12.5px; line-height: 1.35; color: var(--cyan-ink); }
+.plactive[hidden], .pltypes[hidden] { display: none; }
+.plactive .chip { flex: none; }
+.pltypes { max-height: 104px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .22) transparent; margin-top: 0; }
+.allart { display: block; margin: 10px 0 2px; text-align: left; }

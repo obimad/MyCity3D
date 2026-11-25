@@ -1,0 +1,27 @@
+/* 3D-Karte: Ebene "Parkplätze" (Parkplätze, Parkregeln am Straßenrand) und der kurze Haftungshinweis in Karteninfos und Quellen-Dialog (25.11.2026).
+   Nur Variablen des jeweiligen Kartenthemas (--ink, --muted, --cyan ...), daher unverändert für alle vier Seiten. Präfix pk-. */
+
+/* ---- Haftungshinweis (Kurzfassung) in Karteninfos und im Quellen-Dialog */
+.note.haft { font-size: 11.5px; line-height: 1.45; opacity: .9; }
+.note.haft a { white-space: nowrap; }
+
+/* ---- Ebene Parkplätze */
+.mk.nf.pk { border-radius: 8px; padding: 3px 6px; min-width: 22px; font: 700 12px/1 var(--sans); }
+.mk.nf.pk.pks { border-radius: 999px; padding: 3px 7px; font-size: 11px; }
+.mk.nf.pk.pks.big { font-size: 12px; }
+#pkBox { margin: 2px 0 10px; padding: 6px 0 2px; border-bottom: 1px solid var(--line2); }
+#pkBox[hidden] { display: none; }
+#pkBox .chips { margin: 2px 0 8px; }
+.pk-legend { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--ink2); }
+.pk-lg { display: flex; align-items: center; gap: 8px; }
+.pk-lgh { margin-top: 6px; font: 600 11px/1.2 var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.pk-sw { flex: none; min-width: 26px; padding: 3px 5px; border-radius: 7px; background: var(--c); color: #fff; font: 700 11px/1 var(--sans); font-style: normal; text-align: center; border: 1.5px solid #fff; box-shadow: 0 1px 5px rgba(0, 0, 0, .5); }
+.pk-band { flex: none; width: 26px; height: 7px; border-radius: 4px; background: var(--c); box-shadow: 0 0 0 1px rgba(255, 255, 255, .22); display: inline-block; }
+#pkBox .lnote { display: block; margin: 8px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.pk-tag { display: inline-block; padding: 1px 9px; border-radius: 999px; font: 600 12px/1.5 var(--sans); color: #fff; background: #5d6b7a; }
+.pk-tag.paid, .pk-tag.kB { background: #c9701a; }
+.pk-tag.free, .pk-tag.kF { background: #23864f; }
+.pk-tag.kS { background: #2f74c0; }
+.pk-tag.kV { background: #c23d3d; }
+.pk-tag.unk { background: #6b7280; }
+.card dd .pk-tag + .s { margin-top: 3px; }

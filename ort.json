@@ -76,7 +76,7 @@
     }
   },
   "bausteine": {
-    "_hinweis": "Optionale Bausteine, jeder einzeln abschaltbar (false oder null). Nur fuer Brandenburg: baustellen, gelaende, waldbrand (Seite des Landesministeriums), meldeportal im Beispiel (Maerker). Fuer ganz Deutschland: landwirtschaft (DWD, naechste Station), notfall (Loeschwasser, Sirenen, Anlagen, Freizeit, Strassenlampen aus OSM), klima (DWD-Stationen, Liste von Hand), ortsgeschichte (Wikipedia), touren (OSM; wikivoyage = Artikeltitel oder null), webcam (DWD-Bilderserver), drohnenhinweis (Verweis auf dipul). muellabfuhr: Einbettung der Abfuhrabfrage des oertlichen Entsorgers (Adresse des Formulars, das er selbst einbettbar anbietet); null = keine. Das Beispiel gilt fuer Suedbrandenburg (SBAZV). Fremde Formulare setzen oft ein Cookie: in der Datenschutzerklaerung nennen. solar_kwh_je_kwp: Jahresertrag je kWp bei bester Ausrichtung fuer die Solar-Schaetzung (Mitteldeutschland etwa 980). Jeder eingeschaltete Dienst im Browser steht auch im Hinweisfenster der Live-Daten und in der Inhaltsrichtlinie (scripts/baue_seiten.py). Quellen und Lizenzen: docs/DATENQUELLEN.md.",
+    "_hinweis": "Optionale Bausteine, jeder einzeln abschaltbar (false oder null). Nur fuer Brandenburg: baustellen, gelaende, waldbrand (Seite des Landesministeriums), meldeportal im Beispiel (Maerker). Fuer ganz Deutschland: landwirtschaft (DWD, naechste Station), notfall (Loeschwasser, Sirenen, Anlagen, Freizeit, Strassenlampen aus OSM), klima (DWD-Stationen, Liste von Hand), ortsgeschichte (Wikipedia), touren (OSM; wikivoyage = Artikeltitel oder null), webcam (DWD-Bilderserver), drohnenhinweis (Verweis auf dipul). muellabfuhr: Einbettung der Abfuhrabfrage des oertlichen Entsorgers (Adresse des Formulars, das er selbst einbettbar anbietet); null = keine. Das Beispiel gilt fuer Suedbrandenburg (SBAZV). Fremde Formulare setzen oft ein Cookie: in der Datenschutzerklaerung nennen. solar_kwh_je_kwp: Jahresertrag je kWp bei bester Ausrichtung fuer die Solar-Schaetzung (Mitteldeutschland etwa 980). Jeder eingeschaltete Dienst im Browser steht auch im Hinweisfenster der Live-Daten und in der Inhaltsrichtlinie (scripts/baue_seiten.py). Quellen und Lizenzen: docs/DATENQUELLEN.md. Zusatzebenen der Karte (js/ebenen.js, alle einzeln abschaltbar): parken, mobil, fotos (Panoramax, Commons, KartaView; optional {\"ortsbezug\": [\"Wort\", ...]} fuer Commons-Treffer), glasfaser (Breitbandatlas der Bundesnetzagentur; optional {\"datenstand\": \"06.2026\"}), lampen (Strassenlampen bei Dunkelheit; optional {\"abstand_m\": 35, \"nah_m\": 22}), verkehr (simulierter Autoverkehr) gelten ueberall; bplan (Bebauungsplaene, PLIS) und flurstuecke (ALKIS) nur fuer Brandenburg. modelle: eigene 3D-Modelle, siehe docs/MODELLE.md (die Vorlage liefert keine mit).",
     "baustellen": true,
     "gelaende": true,
     "muellabfuhr": {
@@ -134,6 +134,15 @@
       "nutzungsbedingungen": "https://maerker.brandenburg.de/maerker/de/nutzungsbedingungen/",
       "beschreibung": "Defekte Straßenlampe, Schlagloch, wilde Müllkippe, beschädigtes Schild: Hinweise zur kommunalen Infrastruktur gehen an die Kommune, auf Wunsch auch anonym."
     },
-    "drohnenhinweis": true
+    "drohnenhinweis": true,
+    "parken": true,
+    "mobil": true,
+    "fotos": true,
+    "glasfaser": true,
+    "lampen": true,
+    "verkehr": true,
+    "bplan": true,
+    "flurstuecke": true,
+    "modelle": false
   }
 }

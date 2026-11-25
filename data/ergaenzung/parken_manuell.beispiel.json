@@ -1,0 +1,27 @@
+{
+  "hinweis": "Beispiel, erfunden. Kopie als parken_manuell.json anlegen (diese Datei wird nicht gelesen) und eigene Einträge eintragen. Koordinaten durch eigene ersetzen: Die Werte hier liegen irgendwo. Jeder Eintrag braucht eine Quelle (z. B. Satzung der Gemeinde, Auskunft des Betreibers), sonst wird er ignoriert. Gelesen von scripts/fetch_parkplaetze.py (ort.json: bausteine.parken).",
+  "parkplaetze": [
+    {
+      "name": "Parkhaus Beispiel",
+      "art": "Parkhaus",
+      "lat": 50.00000,
+      "lon": 10.00000,
+      "gebuehr": "yes",
+      "plaetze": 120,
+      "charge": "1,00 € je Stunde",
+      "maxstay": "4 Stunden",
+      "zeiten": "Mo-Sa 06:00-22:00",
+      "betreiber": "Beispielbetreiber GmbH",
+      "quelle": "Auskunft des Betreibers, 2026-01-15"
+    }
+  ],
+  "strassen": [
+    {
+      "name": "Beispielstraße",
+      "klasse": "S",
+      "punkte": [[50.00000, 10.00000], [50.00050, 10.00080], [50.00100, 10.00160]],
+      "text": "Parkscheibe, höchstens 2 Stunden (Mo-Fr 08:00-18:00)",
+      "quelle": "Parkzonen-Satzung der Gemeinde Beispiel, § 3"
+    }
+  ]
+}
